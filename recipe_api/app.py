@@ -10,7 +10,7 @@ from functools import wraps
 from fractions import Fraction
 import requests
 from bs4 import BeautifulSoup
-from flask import Flask, request, jsonify, make_response
+from flask import Flask, request, jsonify, make_response, send_from_directory
 from flask_cors import CORS
 
 try:
@@ -45,6 +45,9 @@ app = Flask(__name__)
 CORS(app, supports_credentials=True)
 
 DATABASE = os.environ.get('DATABASE_PATH', os.path.join(os.path.abspath(os.path.dirname(__file__)), 'recipes.db'))
+UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER', os.path.join(os.path.abspath(os.path.dirname(DATABASE)), 'uploads'))
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
 SESSION_COOKIE_NAME = 'recipe_session_token'
 SESSION_DURATION_DAYS = 30
 
@@ -242,7 +245,38 @@ def init_db():
     ''')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_post_comments_post ON post_comments(post_id)')
 
-    # Auto-migrate columns if tables already exist without user_id or recipe meta columns
+    # Friendships & Social Connections Table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS friendships (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            friend_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            status TEXT DEFAULT 'accepted',
+            is_close_friend INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, friend_id)
+        )
+    ''')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_friendships_user ON friendships(user_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_friendships_friend ON friendships(friend_id)')
+
+    # Moderation & Content Reports Table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS post_reports (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            post_id INTEGER REFERENCES community_posts(id) ON DELETE CASCADE,
+            comment_id INTEGER REFERENCES post_comments(id) ON DELETE CASCADE,
+            reported_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            reason TEXT DEFAULT 'inappropriate',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(post_id, reported_by),
+            UNIQUE(comment_id, reported_by)
+        )
+    ''')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_post_reports_post ON post_reports(post_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_post_reports_comment ON post_reports(comment_id)')
+
+    # Auto-migrate columns if tables already exist
     recipe_columns = [col[1] for col in cursor.execute('PRAGMA table_info(recipes)').fetchall()]
     if 'user_id' not in recipe_columns:
         cursor.execute("ALTER TABLE recipes ADD COLUMN user_id INTEGER DEFAULT 1")
@@ -260,6 +294,22 @@ def init_db():
         cursor.execute("ALTER TABLE recipes ADD COLUMN servings TEXT DEFAULT ''")
     if 'share_token' not in recipe_columns:
         cursor.execute("ALTER TABLE recipes ADD COLUMN share_token TEXT")
+    if 'visibility' not in recipe_columns:
+        cursor.execute("ALTER TABLE recipes ADD COLUMN visibility TEXT DEFAULT 'public'")
+
+    post_columns = [col[1] for col in cursor.execute('PRAGMA table_info(community_posts)').fetchall()]
+    if 'is_hidden' not in post_columns:
+        cursor.execute("ALTER TABLE community_posts ADD COLUMN is_hidden INTEGER DEFAULT 0")
+    if 'report_count' not in post_columns:
+        cursor.execute("ALTER TABLE community_posts ADD COLUMN report_count INTEGER DEFAULT 0")
+
+    comment_columns = [col[1] for col in cursor.execute('PRAGMA table_info(post_comments)').fetchall()]
+    if 'parent_id' not in comment_columns:
+        cursor.execute("ALTER TABLE post_comments ADD COLUMN parent_id INTEGER REFERENCES post_comments(id) ON DELETE CASCADE")
+    if 'reply_to_username' not in comment_columns:
+        cursor.execute("ALTER TABLE post_comments ADD COLUMN reply_to_username TEXT DEFAULT ''")
+    if 'is_hidden' not in comment_columns:
+        cursor.execute("ALTER TABLE post_comments ADD COLUMN is_hidden INTEGER DEFAULT 0")
 
     grocery_columns = [col[1] for col in cursor.execute('PRAGMA table_info(groceries)').fetchall()]
     if 'user_id' not in grocery_columns:
@@ -1364,6 +1414,54 @@ def reset_password():
 
     return jsonify({'message': 'Password has been successfully reset! You can now log in with your new password.'}), 200
 
+# --- Media Upload Endpoints ---
+
+@app.route('/api/upload/image', methods=['POST'])
+@login_required
+def upload_image():
+    filename = None
+    if 'file' in request.files:
+        file = request.files['file']
+        if file and file.filename:
+            ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else 'jpg'
+            if ext not in {'png', 'jpg', 'jpeg', 'webp', 'gif', 'heic'}:
+                return jsonify({'error': 'Invalid file format. Allowed: PNG, JPG, JPEG, WEBP, GIF'}), 400
+            clean_token = secrets.token_hex(16)
+            filename = f"img_{clean_token}.{ext if ext != 'heic' else 'jpg'}"
+            file_path = os.path.join(UPLOAD_FOLDER, filename)
+            file.save(file_path)
+    elif request.is_json:
+        data = request.get_json() or {}
+        image_data = data.get('image_data', '')
+        if image_data.startswith('data:image/'):
+            try:
+                import base64
+                header, base64_str = image_data.split(';base64,', 1)
+                mime = header.replace('data:image/', '')
+                ext = 'jpg' if mime in ('jpeg', 'jpg') else ('png' if mime == 'png' else 'webp')
+                decoded = base64.b64decode(base64_str)
+                clean_token = secrets.token_hex(16)
+                filename = f"img_{clean_token}.{ext}"
+                file_path = os.path.join(UPLOAD_FOLDER, filename)
+                with open(file_path, 'wb') as f:
+                    f.write(decoded)
+            except Exception as e:
+                return jsonify({'error': f'Failed to process image data: {str(e)}'}), 400
+
+    if not filename:
+        return jsonify({'error': 'No image file or image_data provided'}), 400
+
+    image_url = f"/api/uploads/{filename}"
+    return jsonify({
+        'message': 'Image uploaded successfully!',
+        'image_url': image_url,
+        'filename': filename
+    }), 201
+
+@app.route('/api/uploads/<path:filename>', methods=['GET'])
+def serve_upload(filename):
+    return send_from_directory(UPLOAD_FOLDER, filename)
+
 # --- Recipe Endpoints ---
 
 @app.route('/api/recipes/import-url', methods=['POST'])
@@ -1414,7 +1512,8 @@ def get_recipes():
             'cook_time': recipe['cook_time'] if 'cook_time' in keys else '',
             'difficulty': recipe['difficulty'] if 'difficulty' in keys else 'Easy',
             'servings': recipe['servings'] if 'servings' in keys else '',
-            'share_token': recipe['share_token'] if 'share_token' in keys else None
+            'share_token': recipe['share_token'] if 'share_token' in keys else None,
+            'visibility': recipe['visibility'] if 'visibility' in keys else 'public'
         })
     return jsonify(recipes_list)
 
@@ -1438,7 +1537,8 @@ def get_recipe(recipe_id):
             'cook_time': recipe['cook_time'] if 'cook_time' in keys else '',
             'difficulty': recipe['difficulty'] if 'difficulty' in keys else 'Easy',
             'servings': recipe['servings'] if 'servings' in keys else '',
-            'share_token': recipe['share_token'] if 'share_token' in keys else None
+            'share_token': recipe['share_token'] if 'share_token' in keys else None,
+            'visibility': recipe['visibility'] if 'visibility' in keys else 'public'
         })
     return jsonify({'error': 'Recipe not found'}), 404
 
@@ -1459,14 +1559,15 @@ def add_recipe():
     cook_time = data.get('cook_time', '').strip()
     difficulty = data.get('difficulty', 'Easy').strip() or 'Easy'
     servings = data.get('servings', '').strip()
+    visibility = data.get('visibility', 'public').strip() or 'public'
 
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
         cursor.execute(
-            """INSERT INTO recipes (user_id, title, ingredients, instructions, category, is_favorite, prep_time, cook_time, difficulty, servings)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (user_id, title, ingredients, instructions, category, is_favorite, prep_time, cook_time, difficulty, servings)
+            """INSERT INTO recipes (user_id, title, ingredients, instructions, category, is_favorite, prep_time, cook_time, difficulty, servings, visibility)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (user_id, title, ingredients, instructions, category, is_favorite, prep_time, cook_time, difficulty, servings, visibility)
         )
         conn.commit()
         new_recipe_id = cursor.lastrowid
@@ -1517,6 +1618,9 @@ def update_recipe(recipe_id):
     if 'servings' in data:
         updates.append("servings = ?")
         params.append(data['servings'].strip())
+    if 'visibility' in data:
+        updates.append("visibility = ?")
+        params.append(data['visibility'].strip())
 
     if not updates:
         conn.close()
@@ -1686,27 +1790,54 @@ def get_community_posts():
     user = get_authenticated_user()
     current_user_id = user['id'] if user else None
 
+    feed_filter = request.args.get('filter', 'all').strip().lower()
     limit = min(max(int(request.args.get('limit', 50)), 1), 100)
     offset = max(int(request.args.get('offset', 0)), 0)
 
     conn = get_db_connection()
-    query = '''
+
+    where_clauses = ["p.is_hidden = 0"]
+    params = [current_user_id, current_user_id, current_user_id, current_user_id, current_user_id, current_user_id]
+
+    if feed_filter == 'friends':
+        if not current_user_id:
+            conn.close()
+            return jsonify([]), 200
+        where_clauses.append("(p.user_id = ? OR p.user_id IN (SELECT friend_id FROM friendships WHERE user_id = ?))")
+        params.extend([current_user_id, current_user_id])
+    elif feed_filter == 'close_friends':
+        if not current_user_id:
+            conn.close()
+            return jsonify([]), 200
+        where_clauses.append("(p.user_id = ? OR p.user_id IN (SELECT friend_id FROM friendships WHERE user_id = ? AND is_close_friend = 1))")
+        params.extend([current_user_id, current_user_id])
+
+    order_clause = "p.created_at DESC"
+    if feed_filter == 'trending':
+        order_clause = "((SELECT COUNT(*) FROM post_likes WHERE post_id = p.id) * 2 + (SELECT COUNT(*) FROM post_comments WHERE post_id = p.id AND is_hidden = 0)) DESC, p.created_at DESC"
+
+    where_str = " AND ".join(where_clauses)
+    query = f'''
         SELECT 
-            p.id, p.user_id, p.content, p.image_url, p.recipe_id, p.created_at,
+            p.id, p.user_id, p.content, p.image_url, p.recipe_id, p.created_at, p.report_count,
             u.username as author_username, u.display_name as author_display_name,
             (SELECT COUNT(*) FROM post_likes WHERE post_id = p.id) as likes_count,
-            (SELECT COUNT(*) FROM post_comments WHERE post_id = p.id) as comments_count,
+            (SELECT COUNT(*) FROM post_comments WHERE post_id = p.id AND is_hidden = 0) as comments_count,
             (CASE WHEN ? IS NOT NULL AND EXISTS(SELECT 1 FROM post_likes WHERE post_id = p.id AND user_id = ?) THEN 1 ELSE 0 END) as liked_by_me,
+            (CASE WHEN ? IS NOT NULL AND EXISTS(SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = p.user_id) THEN 1 ELSE 0 END) as author_is_friend,
+            (CASE WHEN ? IS NOT NULL AND EXISTS(SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = p.user_id AND is_close_friend = 1) THEN 1 ELSE 0 END) as author_is_close_friend,
             r.title as recipe_title, r.category as recipe_category, r.prep_time as recipe_prep_time,
             r.cook_time as recipe_cook_time, r.difficulty as recipe_difficulty, r.servings as recipe_servings,
-            r.share_token as recipe_share_token
+            r.share_token as recipe_share_token, r.visibility as recipe_visibility
         FROM community_posts p
         JOIN users u ON p.user_id = u.id
         LEFT JOIN recipes r ON p.recipe_id = r.id
-        ORDER BY p.created_at DESC
+        WHERE {where_str}
+        ORDER BY {order_clause}
         LIMIT ? OFFSET ?
     '''
-    rows = conn.execute(query, (current_user_id, current_user_id, limit, offset)).fetchall()
+    params.extend([limit, offset])
+    rows = conn.execute(query, tuple(params)).fetchall()
     conn.close()
 
     posts = []
@@ -1721,7 +1852,8 @@ def get_community_posts():
                 'cook_time': row['recipe_cook_time'] or '',
                 'difficulty': row['recipe_difficulty'] or 'Easy',
                 'servings': row['recipe_servings'] or '',
-                'share_token': row['recipe_share_token'] or ''
+                'share_token': row['recipe_share_token'] or '',
+                'visibility': row['recipe_visibility'] or 'public'
             }
 
         posts.append({
@@ -1732,7 +1864,9 @@ def get_community_posts():
             'author': {
                 'id': row['user_id'],
                 'username': row['author_username'],
-                'display_name': row['author_display_name'] or row['author_username']
+                'display_name': row['author_display_name'] or row['author_username'],
+                'is_friend': bool(row['author_is_friend']),
+                'is_close_friend': bool(row['author_is_close_friend'])
             },
             'likes_count': row['likes_count'],
             'comments_count': row['comments_count'],
@@ -1752,8 +1886,8 @@ def create_community_post():
     image_url = data.get('image_url', '').strip()
     recipe_id = data.get('recipe_id')
 
-    if not content:
-        return jsonify({'error': 'Post content cannot be empty'}), 400
+    if not content and not image_url:
+        return jsonify({'error': 'Post must contain text or a photo'}), 400
 
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -1802,7 +1936,7 @@ def toggle_post_like(post_id):
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    post = cursor.execute('SELECT id FROM community_posts WHERE id = ?', (post_id,)).fetchone()
+    post = cursor.execute('SELECT id FROM community_posts WHERE id = ? AND is_hidden = 0', (post_id,)).fetchone()
     if not post:
         conn.close()
         return jsonify({'error': 'Post not found'}), 404
@@ -1828,20 +1962,24 @@ def get_post_comments(post_id):
 
     conn = get_db_connection()
     rows = conn.execute('''
-        SELECT c.id, c.post_id, c.user_id, c.comment, c.created_at,
+        SELECT c.id, c.post_id, c.parent_id, c.reply_to_username, c.user_id, c.comment, c.created_at,
                u.username as author_username, u.display_name as author_display_name
         FROM post_comments c
         JOIN users u ON c.user_id = u.id
-        WHERE c.post_id = ?
+        WHERE c.post_id = ? AND c.is_hidden = 0
         ORDER BY c.created_at ASC
     ''', (post_id,)).fetchall()
     conn.close()
 
-    comments = []
+    comment_map = {}
+    top_level_comments = []
+
     for r in rows:
-        comments.append({
+        c_obj = {
             'id': r['id'],
             'post_id': r['post_id'],
+            'parent_id': r['parent_id'],
+            'reply_to_username': r['reply_to_username'] or '',
             'comment': r['comment'],
             'created_at': r['created_at'],
             'author': {
@@ -1849,10 +1987,20 @@ def get_post_comments(post_id):
                 'username': r['author_username'],
                 'display_name': r['author_display_name'] or r['author_username']
             },
-            'is_mine': (current_user_id is not None and r['user_id'] == current_user_id)
-        })
+            'is_mine': (current_user_id is not None and r['user_id'] == current_user_id),
+            'replies': []
+        }
+        comment_map[r['id']] = c_obj
 
-    return jsonify(comments), 200
+    for r in rows:
+        cid = r['id']
+        pid = r['parent_id']
+        if pid and pid in comment_map:
+            comment_map[pid]['replies'].append(comment_map[cid])
+        else:
+            top_level_comments.append(comment_map[cid])
+
+    return jsonify(top_level_comments), 200
 
 @app.route('/api/community/posts/<int:post_id>/comments', methods=['POST'])
 @login_required
@@ -1860,6 +2008,8 @@ def add_post_comment(post_id):
     user_id = request.current_user['id']
     data = request.get_json() or {}
     comment_text = data.get('comment', '').strip()
+    parent_id = data.get('parent_id')
+    reply_to_username = data.get('reply_to_username', '').strip()
 
     if not comment_text:
         return jsonify({'error': 'Comment cannot be empty'}), 400
@@ -1867,14 +2017,20 @@ def add_post_comment(post_id):
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    post = cursor.execute('SELECT id FROM community_posts WHERE id = ?', (post_id,)).fetchone()
+    post = cursor.execute('SELECT id FROM community_posts WHERE id = ? AND is_hidden = 0', (post_id,)).fetchone()
     if not post:
         conn.close()
         return jsonify({'error': 'Post not found'}), 404
 
+    if parent_id:
+        parent_comment = cursor.execute('SELECT id, user_id FROM post_comments WHERE id = ? AND post_id = ?', (parent_id, post_id)).fetchone()
+        if not parent_comment:
+            conn.close()
+            return jsonify({'error': 'Parent comment not found'}), 404
+
     cursor.execute(
-        'INSERT INTO post_comments (post_id, user_id, comment) VALUES (?, ?, ?)',
-        (post_id, user_id, comment_text)
+        'INSERT INTO post_comments (post_id, user_id, comment, parent_id, reply_to_username) VALUES (?, ?, ?, ?, ?)',
+        (post_id, user_id, comment_text, parent_id, reply_to_username)
     )
     comment_id = cursor.lastrowid
     conn.commit()
@@ -1885,6 +2041,8 @@ def add_post_comment(post_id):
         'comment': {
             'id': comment_id,
             'post_id': post_id,
+            'parent_id': parent_id,
+            'reply_to_username': reply_to_username,
             'comment': comment_text,
             'created_at': datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
             'author': {
@@ -1892,7 +2050,8 @@ def add_post_comment(post_id):
                 'username': request.current_user['username'],
                 'display_name': request.current_user['display_name']
             },
-            'is_mine': True
+            'is_mine': True,
+            'replies': []
         }
     }), 201
 
@@ -1912,6 +2071,267 @@ def delete_post_comment(comment_id):
     conn.commit()
     conn.close()
     return jsonify({'message': 'Comment deleted successfully'}), 200
+
+# --- Moderation & Reporting Endpoints ---
+
+@app.route('/api/community/posts/<int:post_id>/report', methods=['POST'])
+@login_required
+def report_community_post(post_id):
+    user_id = request.current_user['id']
+    data = request.get_json() or {}
+    reason = data.get('reason', 'inappropriate').strip()
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    post = cursor.execute('SELECT id, is_hidden FROM community_posts WHERE id = ?', (post_id,)).fetchone()
+    if not post:
+        conn.close()
+        return jsonify({'error': 'Post not found'}), 404
+
+    try:
+        cursor.execute(
+            'INSERT INTO post_reports (post_id, reported_by, reason) VALUES (?, ?, ?)',
+            (post_id, user_id, reason)
+        )
+    except sqlite3.IntegrityError:
+        conn.close()
+        return jsonify({'error': 'You have already reported this post'}), 400
+
+    report_count = cursor.execute('SELECT COUNT(*) FROM post_reports WHERE post_id = ?', (post_id,)).fetchone()[0]
+    cursor.execute('UPDATE community_posts SET report_count = ? WHERE id = ?', (report_count, post_id))
+
+    quarantined = False
+    if report_count >= 3:
+        cursor.execute('UPDATE community_posts SET is_hidden = 1 WHERE id = ?', (post_id,))
+        quarantined = True
+
+    conn.commit()
+    conn.close()
+
+    return jsonify({
+        'message': 'Post reported. Thank you for keeping our community friendly and safe!',
+        'quarantined': quarantined,
+        'report_count': report_count
+    }), 200
+
+@app.route('/api/community/comments/<int:comment_id>/report', methods=['POST'])
+@login_required
+def report_post_comment(comment_id):
+    user_id = request.current_user['id']
+    data = request.get_json() or {}
+    reason = data.get('reason', 'inappropriate').strip()
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    comment = cursor.execute('SELECT id, is_hidden FROM post_comments WHERE id = ?', (comment_id,)).fetchone()
+    if not comment:
+        conn.close()
+        return jsonify({'error': 'Comment not found'}), 404
+
+    try:
+        cursor.execute(
+            'INSERT INTO post_reports (comment_id, reported_by, reason) VALUES (?, ?, ?)',
+            (comment_id, user_id, reason)
+        )
+    except sqlite3.IntegrityError:
+        conn.close()
+        return jsonify({'error': 'You have already reported this comment'}), 400
+
+    report_count = cursor.execute('SELECT COUNT(*) FROM post_reports WHERE comment_id = ?', (comment_id,)).fetchone()[0]
+    quarantined = False
+    if report_count >= 3:
+        cursor.execute('UPDATE post_comments SET is_hidden = 1 WHERE id = ?', (comment_id,))
+        quarantined = True
+
+    conn.commit()
+    conn.close()
+
+    return jsonify({
+        'message': 'Comment reported. Thank you for keeping our community friendly and safe!',
+        'quarantined': quarantined,
+        'report_count': report_count
+    }), 200
+
+# --- Friends & Social Relationships Endpoints ---
+
+@app.route('/api/friends', methods=['GET'])
+@login_required
+def get_friends():
+    user_id = request.current_user['id']
+    conn = get_db_connection()
+    rows = conn.execute('''
+        SELECT f.friend_id as id, f.is_close_friend, f.created_at,
+               u.username, u.display_name
+        FROM friendships f
+        JOIN users u ON f.friend_id = u.id
+        WHERE f.user_id = ? AND u.is_active = 1
+        ORDER BY f.is_close_friend DESC, u.username ASC
+    ''', (user_id,)).fetchall()
+    conn.close()
+
+    friends = []
+    for r in rows:
+        friends.append({
+            'id': r['id'],
+            'username': r['username'],
+            'display_name': r['display_name'] or r['username'],
+            'is_close_friend': bool(r['is_close_friend']),
+            'created_at': r['created_at']
+        })
+
+    return jsonify(friends), 200
+
+@app.route('/api/friends/<int:friend_id>', methods=['POST'])
+@login_required
+def add_friend(friend_id):
+    user_id = request.current_user['id']
+    if user_id == friend_id:
+        return jsonify({'error': 'You cannot add yourself as a friend'}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    target_user = cursor.execute('SELECT id, username, display_name FROM users WHERE id = ? AND is_active = 1', (friend_id,)).fetchone()
+    if not target_user:
+        conn.close()
+        return jsonify({'error': 'User not found'}), 404
+
+    cursor.execute('''
+        INSERT INTO friendships (user_id, friend_id, is_close_friend)
+        VALUES (?, ?, 0)
+        ON CONFLICT(user_id, friend_id) DO NOTHING
+    ''', (user_id, friend_id))
+    conn.commit()
+    conn.close()
+
+    return jsonify({
+        'message': f'You are now following {target_user["display_name"] or target_user["username"]}!',
+        'friend': {
+            'id': target_user['id'],
+            'username': target_user['username'],
+            'display_name': target_user['display_name'] or target_user['username'],
+            'is_close_friend': False
+        }
+    }), 201
+
+@app.route('/api/friends/<int:friend_id>', methods=['DELETE'])
+@login_required
+def remove_friend(friend_id):
+    user_id = request.current_user['id']
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute('DELETE FROM friendships WHERE user_id = ? AND friend_id = ?', (user_id, friend_id))
+    conn.commit()
+    conn.close()
+
+    return jsonify({'message': 'Friend removed successfully'}), 200
+
+@app.route('/api/friends/<int:friend_id>/toggle-close-friend', methods=['POST'])
+@login_required
+def toggle_close_friend(friend_id):
+    user_id = request.current_user['id']
+    if user_id == friend_id:
+        return jsonify({'error': 'Cannot set yourself as a close friend'}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    existing = cursor.execute('SELECT is_close_friend FROM friendships WHERE user_id = ? AND friend_id = ?', (user_id, friend_id)).fetchone()
+    if existing:
+        new_val = 0 if existing['is_close_friend'] else 1
+        cursor.execute('UPDATE friendships SET is_close_friend = ? WHERE user_id = ? AND friend_id = ?', (new_val, user_id, friend_id))
+    else:
+        new_val = 1
+        cursor.execute('INSERT INTO friendships (user_id, friend_id, is_close_friend) VALUES (?, ?, 1)', (user_id, friend_id))
+
+    conn.commit()
+    conn.close()
+
+    return jsonify({
+        'is_close_friend': bool(new_val),
+        'message': '⭐ Added to Close Friends!' if new_val else 'Removed from Close Friends'
+    }), 200
+
+@app.route('/api/users/<int:target_user_id>/recipes', methods=['GET'])
+def get_user_recipe_box(target_user_id):
+    user = get_authenticated_user()
+    current_user_id = user['id'] if user else None
+
+    conn = get_db_connection()
+    target_user = conn.execute('SELECT id, username, display_name FROM users WHERE id = ? AND is_active = 1', (target_user_id,)).fetchone()
+    if not target_user:
+        conn.close()
+        return jsonify({'error': 'User not found'}), 404
+
+    # Determine visibility permissions
+    if current_user_id == target_user_id:
+        allowed_visibilities = ('public', 'close_friends', 'private')
+    elif current_user_id:
+        # Check if target_user marked current_user as a close friend
+        target_close_rel = conn.execute(
+            'SELECT is_close_friend FROM friendships WHERE user_id = ? AND friend_id = ? AND is_close_friend = 1',
+            (target_user_id, current_user_id)
+        ).fetchone()
+        if target_close_rel:
+            allowed_visibilities = ('public', 'close_friends')
+        else:
+            allowed_visibilities = ('public',)
+    else:
+        allowed_visibilities = ('public',)
+
+    # Check relationships from current user's perspective
+    is_my_friend = False
+    is_my_close_friend = False
+    they_made_me_close_friend = False
+
+    if current_user_id and current_user_id != target_user_id:
+        my_rel = conn.execute('SELECT is_close_friend FROM friendships WHERE user_id = ? AND friend_id = ?', (current_user_id, target_user_id)).fetchone()
+        if my_rel:
+            is_my_friend = True
+            is_my_close_friend = bool(my_rel['is_close_friend'])
+        their_rel = conn.execute('SELECT is_close_friend FROM friendships WHERE user_id = ? AND friend_id = ?', (target_user_id, current_user_id)).fetchone()
+        if their_rel and their_rel['is_close_friend']:
+            they_made_me_close_friend = True
+
+    placeholders = ','.join('?' for _ in allowed_visibilities)
+    recipes_db = conn.execute(
+        f'SELECT * FROM recipes WHERE user_id = ? AND visibility IN ({placeholders}) ORDER BY is_favorite DESC, id DESC',
+        (target_user_id, *allowed_visibilities)
+    ).fetchall()
+    conn.close()
+
+    recipes_list = []
+    for recipe in recipes_db:
+        keys = recipe.keys()
+        recipes_list.append({
+            'id': recipe['id'],
+            'title': recipe['title'],
+            'ingredients': recipe['ingredients'],
+            'instructions': recipe['instructions'],
+            'category': recipe['category'] if 'category' in keys else 'General',
+            'is_favorite': bool(recipe['is_favorite']) if 'is_favorite' in keys else False,
+            'prep_time': recipe['prep_time'] if 'prep_time' in keys else '',
+            'cook_time': recipe['cook_time'] if 'cook_time' in keys else '',
+            'difficulty': recipe['difficulty'] if 'difficulty' in keys else 'Easy',
+            'servings': recipe['servings'] if 'servings' in keys else '',
+            'share_token': recipe['share_token'] if 'share_token' in keys else None,
+            'visibility': recipe['visibility'] if 'visibility' in keys else 'public'
+        })
+
+    return jsonify({
+        'user': {
+            'id': target_user['id'],
+            'username': target_user['username'],
+            'display_name': target_user['display_name'] or target_user['username'],
+            'is_friend': is_my_friend,
+            'is_close_friend': is_my_close_friend,
+            'they_made_me_close_friend': they_made_me_close_friend
+        },
+        'recipes': recipes_list
+    }), 200
 
 # --- Planner Endpoints ---
 

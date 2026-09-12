@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Community Feed &bull; Virtual Recipe Box &amp; Planner</title>
+    <title>Community Food Feed &bull; Virtual Recipe Box</title>
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&family=Playfair+Display:wght@700&family=Caveat:wght@600&display=swap" rel="stylesheet">
     <script src="theme.js"></script>
     <script src="auth.js"></script>
@@ -17,6 +17,8 @@
             --card-background: #FDFDFD;
             --border-color: #E0E0E0;
             --button-hover: #E85B70;
+            --star-gold: #f39c12;
+            --star-gold-bg: #fff8e7;
             --floral-pattern: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" opacity="0.1"><circle cx="20" cy="20" r="5" fill="%23fcc" /><circle cx="80" cy="80" r="5" fill="%23fcc" /><circle cx="20" cy="80" r="5" fill="%23fcc" /><circle cx="80" cy="20" r="5" fill="%23fcc" /></svg>');
         }
 
@@ -29,6 +31,8 @@
             --card-background: #203F5F;
             --border-color: #55445B;
             --button-hover: #D04A5D;
+            --star-gold: #f1c40f;
+            --star-gold-bg: #3d3420;
             --floral-pattern: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" opacity="0.05"><circle cx="20" cy="20" r="5" fill="%234A3C4D" /><circle cx="80" cy="80" r="5" fill="%234A3C4D" /><circle cx="20" cy="80" r="5" fill="%234A3C4D" /><circle cx="80" cy="20" r="5" fill="%234A3C4D" /></svg>');
         }
 
@@ -153,8 +157,8 @@
 
         main {
             padding: 24px;
-            max-width: 820px;
-            margin: 30px auto;
+            max-width: 860px;
+            margin: 20px auto;
             width: 100%;
             box-sizing: border-box;
             flex: 1;
@@ -165,8 +169,8 @@
             background: linear-gradient(135deg, var(--light-pink) 0%, var(--card-background) 100%);
             border: 1px solid var(--border-color);
             border-radius: 16px;
-            padding: 22px 28px;
-            margin-bottom: 24px;
+            padding: 20px 24px;
+            margin-bottom: 20px;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -177,7 +181,7 @@
 
         .feed-header-banner h2 {
             margin: 0 0 4px 0;
-            font-size: 1.8em;
+            font-size: 1.75em;
         }
 
         .feed-header-banner p {
@@ -206,6 +210,43 @@
             transform: translateY(-1px);
         }
 
+        /* Filter Tabs */
+        .feed-filters-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 22px;
+            overflow-x: auto;
+            padding-bottom: 4px;
+        }
+
+        .feed-tab-btn {
+            background: var(--card-background);
+            border: 1.5px solid var(--border-color);
+            color: var(--text-color);
+            padding: 9px 18px;
+            border-radius: 24px;
+            font-size: 0.92em;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+
+        .feed-tab-btn:hover {
+            border-color: var(--primary-pink);
+            color: var(--primary-pink);
+        }
+
+        .feed-tab-btn.active {
+            background: var(--primary-pink);
+            border-color: var(--primary-pink);
+            color: white;
+            box-shadow: 0 3px 8px rgba(255, 107, 129, 0.3);
+        }
+
         /* Composer Card */
         .composer-card {
             background: var(--card-background);
@@ -226,7 +267,7 @@
 
         .composer-textarea {
             width: 100%;
-            min-height: 95px;
+            min-height: 90px;
             padding: 14px;
             border: 1px solid var(--border-color);
             border-radius: 12px;
@@ -245,6 +286,75 @@
             box-shadow: 0 0 0 3px rgba(255, 107, 129, 0.2);
         }
 
+        /* Photo Upload Dropzone / Preview */
+        .composer-media-zone {
+            margin-top: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .upload-trigger-btn {
+            background: var(--light-pink);
+            color: var(--primary-pink);
+            border: 1.5px dashed var(--primary-pink);
+            padding: 10px 16px;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 0.9em;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            width: fit-content;
+            transition: all 0.2s ease;
+        }
+
+        .upload-trigger-btn:hover {
+            background: var(--primary-pink);
+            color: white;
+        }
+
+        .photo-preview-container {
+            position: relative;
+            max-width: 260px;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1.5px solid var(--border-color);
+            display: none;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .photo-preview-img {
+            width: 100%;
+            height: auto;
+            max-height: 180px;
+            object-fit: cover;
+            display: block;
+        }
+
+        .btn-remove-preview {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 26px;
+            height: 26px;
+            font-size: 0.9em;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+
+        .btn-remove-preview:hover {
+            background: #e74c3c;
+        }
+
         .composer-extras {
             display: flex;
             flex-direction: column;
@@ -260,7 +370,7 @@
 
         .composer-input-group {
             flex: 1;
-            min-width: 240px;
+            min-width: 220px;
         }
 
         .composer-input-group label {
@@ -271,7 +381,7 @@
             opacity: 0.85;
         }
 
-        .composer-input {
+        .composer-select, .composer-input {
             width: 100%;
             padding: 9px 12px;
             border: 1px solid var(--border-color);
@@ -280,24 +390,15 @@
             color: var(--text-color);
             font-size: 0.9em;
             box-sizing: border-box;
-        }
-
-        .composer-select {
-            width: 100%;
-            padding: 9px 12px;
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            background: var(--background-color);
-            color: var(--text-color);
-            font-size: 0.9em;
-            box-sizing: border-box;
-            cursor: pointer;
         }
 
         .composer-actions {
             display: flex;
-            justify-content: flex-end;
-            margin-top: 14px;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 16px;
+            flex-wrap: wrap;
+            gap: 10px;
         }
 
         .btn-post {
@@ -348,6 +449,8 @@
             justify-content: space-between;
             align-items: center;
             margin-bottom: 14px;
+            flex-wrap: wrap;
+            gap: 10px;
         }
 
         .post-author-info {
@@ -380,11 +483,99 @@
             font-weight: 700;
             font-size: 1.02em;
             color: var(--text-color);
+            display: flex;
+            align-items: center;
+            gap: 6px;
         }
 
         .post-meta {
             font-size: 0.8em;
             opacity: 0.65;
+        }
+
+        .post-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Social / Friend Action Badges */
+        .btn-friend-action {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            padding: 4px 10px;
+            border-radius: 16px;
+            font-size: 0.8em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .btn-friend-action:hover {
+            border-color: var(--primary-pink);
+            color: var(--primary-pink);
+        }
+
+        .btn-friend-action.is-friend {
+            background: var(--light-pink);
+            border-color: var(--primary-pink);
+            color: var(--primary-pink);
+        }
+
+        .btn-star-close {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: #888;
+            padding: 4px 9px;
+            border-radius: 16px;
+            font-size: 0.8em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-star-close.active {
+            background: var(--star-gold-bg);
+            border-color: var(--star-gold);
+            color: var(--star-gold);
+            font-weight: bold;
+        }
+
+        .btn-view-friend-box {
+            background: rgba(0,0,0,0.04);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            padding: 4px 10px;
+            border-radius: 16px;
+            font-size: 0.8em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-view-friend-box:hover {
+            background: var(--light-pink);
+            color: var(--primary-pink);
+            border-color: var(--primary-pink);
+        }
+
+        .btn-report {
+            background: transparent;
+            border: none;
+            color: #999;
+            cursor: pointer;
+            font-size: 0.9em;
+            padding: 4px 6px;
+            border-radius: 6px;
+            transition: color 0.2s;
+        }
+
+        .btn-report:hover {
+            color: #e74c3c;
         }
 
         .btn-delete-post {
@@ -417,7 +608,7 @@
             border-radius: 12px;
             overflow: hidden;
             border: 1px solid var(--border-color);
-            max-height: 450px;
+            max-height: 480px;
             background: rgba(0,0,0,0.03);
             display: flex;
             align-items: center;
@@ -427,12 +618,12 @@
         .post-image {
             width: 100%;
             height: auto;
-            max-height: 450px;
+            max-height: 480px;
             object-fit: cover;
             display: block;
         }
 
-        /* Linked Recipe Card within Feed */
+        /* Linked Recipe Card */
         .linked-recipe-box {
             background: linear-gradient(135deg, var(--light-pink) 0%, var(--card-background) 100%);
             border: 1.5px solid var(--accent-pink);
@@ -452,6 +643,14 @@
             min-width: 220px;
         }
 
+        .linked-recipe-badges {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            margin-bottom: 6px;
+            flex-wrap: wrap;
+        }
+
         .linked-recipe-badge {
             display: inline-block;
             background: var(--primary-pink);
@@ -462,7 +661,16 @@
             border-radius: 12px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
-            margin-bottom: 6px;
+        }
+
+        .badge-cf {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
+            font-size: 0.72em;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 12px;
         }
 
         .linked-recipe-title {
@@ -496,7 +704,6 @@
             font-size: 0.88em;
             cursor: pointer;
             transition: all 0.2s;
-            text-decoration: none;
             display: inline-flex;
             align-items: center;
             gap: 4px;
@@ -534,14 +741,19 @@
             transform: none;
         }
 
-        /* Post Action Bar (Likes & Comments) */
+        /* Post Action Bar (Likes, Comments, Report) */
         .post-action-bar {
             display: flex;
+            justify-content: space-between;
             align-items: center;
-            gap: 18px;
             padding-top: 12px;
             margin-top: 12px;
             border-top: 1px solid var(--border-color);
+        }
+
+        .action-btns-left {
+            display: flex;
+            gap: 14px;
         }
 
         .action-btn {
@@ -557,7 +769,7 @@
             padding: 6px 12px;
             border-radius: 20px;
             transition: all 0.2s;
-            opacity: 0.8;
+            opacity: 0.85;
         }
 
         .action-btn:hover {
@@ -576,7 +788,7 @@
             display: inline-block;
         }
 
-        /* Comments Section */
+        /* Threaded Comments Section */
         .comments-section {
             margin-top: 14px;
             padding-top: 14px;
@@ -597,8 +809,14 @@
         .comments-list {
             display: flex;
             flex-direction: column;
-            gap: 10px;
-            margin-bottom: 14px;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .comment-node {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
         }
 
         .comment-item {
@@ -607,10 +825,21 @@
             padding: 10px 14px;
             font-size: 0.92em;
             position: relative;
+            border: 1px solid rgba(0,0,0,0.03);
         }
 
         body.dark-mode .comment-item {
             background: rgba(255,255,255,0.04);
+            border-color: rgba(255,255,255,0.05);
+        }
+
+        .comment-replies-thread {
+            margin-left: 24px;
+            padding-left: 12px;
+            border-left: 2px solid var(--primary-pink);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
         }
 
         .comment-header {
@@ -619,19 +848,58 @@
             margin-bottom: 4px;
         }
 
+        .comment-author-box {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
         .comment-author {
             font-weight: 700;
             color: var(--primary-pink);
             font-size: 0.9em;
         }
 
+        .comment-tag-reply {
+            color: #888;
+            font-size: 0.82em;
+            font-weight: normal;
+        }
+
         .comment-meta {
             font-size: 0.78em;
-            opacity: 0.6;
+            opacity: 0.65;
+            display: flex;
+            align-items: center;
+            gap: 6px;
         }
 
         .comment-body {
             word-break: break-word;
+            line-height: 1.5;
+        }
+
+        .comment-actions-bar {
+            display: flex;
+            gap: 12px;
+            margin-top: 6px;
+            font-size: 0.82em;
+        }
+
+        .btn-comment-action {
+            background: none;
+            border: none;
+            color: var(--primary-pink);
+            cursor: pointer;
+            font-weight: 600;
+            padding: 0;
+            opacity: 0.8;
+            transition: opacity 0.2s;
+        }
+
+        .btn-comment-action:hover {
+            opacity: 1;
+            text-decoration: underline;
         }
 
         .btn-delete-comment {
@@ -642,21 +910,47 @@
             font-size: 0.85em;
             opacity: 0.6;
             padding: 0 4px;
-            margin-left: 6px;
         }
 
         .btn-delete-comment:hover {
             opacity: 1;
         }
 
+        .reply-target-banner {
+            display: none;
+            background: var(--light-pink);
+            border-radius: 8px;
+            padding: 6px 12px;
+            font-size: 0.85em;
+            margin-bottom: 8px;
+            align-items: center;
+            justify-content: space-between;
+            color: var(--primary-pink);
+            font-weight: 600;
+        }
+
+        .reply-target-banner button {
+            background: none;
+            border: none;
+            color: #666;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
         .comment-composer {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .comment-input-row {
             display: flex;
             gap: 8px;
         }
 
         .comment-input {
             flex: 1;
-            padding: 8px 12px;
+            padding: 9px 14px;
             border: 1px solid var(--border-color);
             border-radius: 20px;
             background: var(--background-color);
@@ -668,7 +962,7 @@
             background: var(--primary-pink);
             color: white;
             border: none;
-            padding: 8px 16px;
+            padding: 9px 18px;
             border-radius: 20px;
             font-weight: 600;
             font-size: 0.88em;
@@ -683,17 +977,13 @@
         /* Empty State */
         .empty-feed {
             text-align: center;
-            padding: 40px 20px;
+            padding: 45px 20px;
             background: var(--card-background);
             border: 1px dashed var(--border-color);
             border-radius: 16px;
         }
 
-        .empty-feed h3 {
-            margin-bottom: 6px;
-        }
-
-        /* Quick Recipe Modal */
+        /* Modals */
         .modal-overlay {
             display: none;
             position: fixed;
@@ -711,7 +1001,7 @@
             color: var(--text-color);
             border-radius: 16px;
             width: 100%;
-            max-width: 600px;
+            max-width: 620px;
             max-height: 85vh;
             display: flex;
             flex-direction: column;
@@ -719,6 +1009,10 @@
             border: 1px solid var(--border-color);
             overflow: hidden;
             animation: modalPop 0.2s ease-out;
+        }
+
+        .modal-card.large-modal {
+            max-width: 780px;
         }
 
         @keyframes modalPop {
@@ -736,7 +1030,7 @@
 
         .modal-header h3 {
             margin: 0;
-            font-size: 1.4em;
+            font-size: 1.35em;
         }
 
         .modal-close {
@@ -765,6 +1059,31 @@
             display: flex;
             justify-content: flex-end;
             gap: 10px;
+        }
+
+        /* Friend Box Recipes Grid */
+        .friend-box-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 16px;
+        }
+
+        .friend-box-recipe-card {
+            background: var(--background-color);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 10px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+        }
+
+        .friend-box-recipe-card h4 {
+            margin: 0 0 4px 0;
+            font-size: 1.1em;
+            color: var(--primary-pink);
         }
 
         footer {
@@ -801,26 +1120,54 @@
         <div class="feed-header-banner">
             <div>
                 <h2>🍲 Community Food Feed</h2>
-                <p>Discover what your fellow home chefs are whipping up, share your kitchen creations, and 1-click clone recipes!</p>
+                <p>Discover culinary ideas, share photos of your latest bakes &amp; dishes, connect with foodie friends, and 1-click clone recipes!</p>
             </div>
             <button class="btn-refresh" onclick="loadPosts()" title="Refresh Feed">
                 🔄 Refresh
             </button>
         </div>
 
+        <!-- Feed Filter Tabs -->
+        <div class="feed-filters-bar">
+            <button class="feed-tab-btn active" id="tab-all" onclick="setFeedFilter('all')">🌟 All Community</button>
+            <button class="feed-tab-btn" id="tab-friends" onclick="setFeedFilter('friends')">👥 Friends Only</button>
+            <button class="feed-tab-btn" id="tab-close_friends" onclick="setFeedFilter('close_friends')">⭐ Close Friends</button>
+            <button class="feed-tab-btn" id="tab-trending" onclick="setFeedFilter('trending')">🔥 Trending</button>
+        </div>
+
         <!-- Post Composer Card -->
         <div class="composer-card" id="composerCard">
             <h3>✍️ Share with the Community</h3>
-            <textarea id="postContent" class="composer-textarea" placeholder="What are you making or craving today? Share your thoughts, cooking tips, or recent kitchen wins..."></textarea>
+            <textarea id="postContent" class="composer-textarea" placeholder="What are you cooking or craving today? Share your thoughts, cooking tips, photos, or recent wins..."></textarea>
             
+            <!-- Photo Upload Area -->
+            <div class="composer-media-zone">
+                <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                    <input type="file" id="postPhotoFile" accept="image/png, image/jpeg, image/jpg, image/webp, image/heic" style="display:none;" onchange="handlePhotoSelect(event)" />
+                    <button type="button" class="upload-trigger-btn" onclick="document.getElementById('postPhotoFile').click()">
+                        📷 Add Photo from Camera / Device
+                    </button>
+                    <button type="button" style="background:none; border:none; color:var(--text-color); font-size:0.85em; text-decoration:underline; cursor:pointer; opacity:0.8;" onclick="toggleUrlInput()">
+                        Or paste image link
+                    </button>
+                </div>
+
+                <!-- Live Preview Thumbnail -->
+                <div class="photo-preview-container" id="photoPreviewContainer">
+                    <img id="photoPreviewImg" class="photo-preview-img" alt="Preview" />
+                    <button type="button" class="btn-remove-preview" onclick="removeSelectedPhoto()" title="Remove photo">&times;</button>
+                </div>
+
+                <!-- URL input fallback -->
+                <div id="urlInputContainer" style="display:none; margin-top:6px;">
+                    <input type="url" id="postImage" class="composer-input" placeholder="https://example.com/my-dish.jpg" oninput="handleUrlInput(this.value)" />
+                </div>
+            </div>
+
             <div class="composer-extras">
                 <div class="composer-row">
                     <div class="composer-input-group">
-                        <label for="postImage">📷 Image URL (Optional)</label>
-                        <input type="url" id="postImage" class="composer-input" placeholder="https://example.com/my-dish.jpg" />
-                    </div>
-                    <div class="composer-input-group">
-                        <label for="postRecipeSelect">🔗 Attach Recipe (Optional)</label>
+                        <label for="postRecipeSelect">🔗 Attach Recipe from your Box (Optional)</label>
                         <select id="postRecipeSelect" class="composer-select">
                             <option value="">-- No Recipe Attached --</option>
                         </select>
@@ -829,6 +1176,7 @@
             </div>
 
             <div class="composer-actions">
+                <span id="composerNotice" style="font-size:0.85em; opacity:0.75;"></span>
                 <button class="btn-post" id="btnPublishPost" onclick="createPost()">
                     🚀 Post to Feed
                 </button>
@@ -858,6 +1206,22 @@
         </div>
     </div>
 
+    <!-- Friend Recipe Box Viewer Modal -->
+    <div id="friendBoxModal" class="modal-overlay">
+        <div class="modal-card large-modal">
+            <div class="modal-header">
+                <h3 id="friendBoxTitle">Chef's Recipe Box</h3>
+                <button class="modal-close" onclick="closeFriendBoxModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="friendBoxBody">
+                <!-- Injected via JS -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-friend-action" onclick="closeFriendBoxModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
     <footer>
         &copy; Virtual Recipe Box &bull; Self-Hosted Multi-User Community Edition
     </footer>
@@ -866,8 +1230,11 @@
         let currentUser = null;
         let myRecipes = [];
         let activeModalShareToken = null;
+        let currentFeedFilter = 'all';
+        let selectedCompressedBlob = null;
+        let activeReplyTargets = {}; // postId -> { parentId, username }
 
-        // Auto check auth
+        // Initialize Authentication & Feed
         window.Auth.init().then(user => {
             currentUser = user;
             if (currentUser) {
@@ -883,7 +1250,20 @@
             loadPosts();
         });
 
-        // Load current user's recipes for the dropdown
+        // Feed Filter switching
+        function setFeedFilter(filter) {
+            if ((filter === 'friends' || filter === 'close_friends') && !currentUser) {
+                window.location.href = 'login.html?redirect=feed.html';
+                return;
+            }
+            currentFeedFilter = filter;
+            document.querySelectorAll('.feed-tab-btn').forEach(btn => btn.classList.remove('active'));
+            const activeBtn = document.getElementById(`tab-${filter}`);
+            if (activeBtn) activeBtn.classList.add('active');
+            loadPosts();
+        }
+
+        // Load current user's recipes for the composer dropdown
         async function loadMyRecipesDropdown() {
             try {
                 const res = await fetch('/api/recipes', { credentials: 'include' });
@@ -923,19 +1303,94 @@
             return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         }
 
-        // Load feed posts
+        // Toggle URL input fallback
+        function toggleUrlInput() {
+            const el = document.getElementById('urlInputContainer');
+            el.style.display = el.style.display === 'none' ? 'block' : 'none';
+        }
+
+        function handleUrlInput(val) {
+            if (val.trim()) {
+                selectedCompressedBlob = null;
+                const prev = document.getElementById('photoPreviewContainer');
+                const img = document.getElementById('photoPreviewImg');
+                img.src = val.trim();
+                prev.style.display = 'block';
+            }
+        }
+
+        // Client-side photo selection & canvas downscaling
+        function handlePhotoSelect(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+
+                    // Max bounding box: 1280 x 1280
+                    const MAX_SIZE = 1280;
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > height) {
+                        if (width > MAX_SIZE) {
+                            height = Math.round(height * (MAX_SIZE / width));
+                            width = MAX_SIZE;
+                        }
+                    } else {
+                        if (height > MAX_SIZE) {
+                            width = Math.round(width * (MAX_SIZE / height));
+                            height = MAX_SIZE;
+                        }
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    canvas.toBlob((blob) => {
+                        selectedCompressedBlob = blob;
+                        const prevContainer = document.getElementById('photoPreviewContainer');
+                        const prevImg = document.getElementById('photoPreviewImg');
+                        prevImg.src = URL.createObjectURL(blob);
+                        prevContainer.style.display = 'block';
+                        document.getElementById('postImage').value = '';
+                    }, 'image/jpeg', 0.85);
+                };
+                img.src = evt.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function removeSelectedPhoto() {
+            selectedCompressedBlob = null;
+            document.getElementById('postPhotoFile').value = '';
+            document.getElementById('postImage').value = '';
+            document.getElementById('photoPreviewContainer').style.display = 'none';
+        }
+
+        // Load feed posts based on active filter
         async function loadPosts() {
             const container = document.getElementById('feedContainer');
             try {
-                const res = await fetch('/api/community/posts', { credentials: 'include' });
+                const res = await fetch(`/api/community/posts?filter=${encodeURIComponent(currentFeedFilter)}`, { credentials: 'include' });
                 if (!res.ok) throw new Error('Could not load community feed');
                 const posts = await res.json();
 
                 if (posts.length === 0) {
+                    let msg = 'Be the first to share a delicious food post or recipe above!';
+                    if (currentFeedFilter === 'friends') msg = 'You are not following any foodies yet, or your friends haven\'t posted yet. Explore "All Community" to follow friends!';
+                    if (currentFeedFilter === 'close_friends') msg = 'No posts from Close Friends yet. Star foodies as Close Friends to see their exclusive kitchen posts!';
+                    
                     container.innerHTML = `
                         <div class="empty-feed">
-                            <h3>🌱 No community posts yet!</h3>
-                            <p>Be the first to share a food post or delicious recipe above!</p>
+                            <div style="font-size:2.5em; margin-bottom:10px;">🍲</div>
+                            <h3>🌱 No community posts in this view</h3>
+                            <p>${escapeHtml(msg)}</p>
                         </div>
                     `;
                     return;
@@ -961,10 +1416,14 @@
 
             let recipeHtml = '';
             if (post.recipe) {
+                const isCloseFriendRecipe = post.recipe.visibility === 'close_friends';
                 recipeHtml = `
                     <div class="linked-recipe-box">
                         <div class="linked-recipe-details">
-                            <span class="linked-recipe-badge">${escapeHtml(post.recipe.category)}</span>
+                            <div class="linked-recipe-badges">
+                                <span class="linked-recipe-badge">${escapeHtml(post.recipe.category)}</span>
+                                ${isCloseFriendRecipe ? '<span class="badge-cf">⭐ Close Friends</span>' : ''}
+                            </div>
                             <h4 class="linked-recipe-title">${escapeHtml(post.recipe.title)}</h4>
                             <div class="linked-recipe-meta">
                                 ${post.recipe.prep_time ? `<span>⏱️ Prep: ${escapeHtml(post.recipe.prep_time)}</span>` : ''}
@@ -993,6 +1452,23 @@
                 `;
             }
 
+            let authorSocialControls = '';
+            if (currentUser && !post.is_mine) {
+                const isFriend = post.author.is_friend;
+                const isClose = post.author.is_close_friend;
+                authorSocialControls = `
+                    <button class="btn-friend-action ${isFriend ? 'is-friend' : ''}" onclick="toggleFriend(${post.author.id}, ${post.id})">
+                        ${isFriend ? '✓ Following' : '+ Follow'}
+                    </button>
+                    <button class="btn-star-close ${isClose ? 'active' : ''}" onclick="toggleCloseFriend(${post.author.id}, ${post.id})" title="${isClose ? 'Remove from Close Friends' : 'Mark as Close Friend'}">
+                        ⭐ ${isClose ? 'Close Friend' : 'Star'}
+                    </button>
+                    <button class="btn-view-friend-box" onclick="openFriendRecipeBox(${post.author.id}, '${escapeHtml(authorName)}')">
+                        📚 Recipe Box
+                    </button>
+                `;
+            }
+
             let deleteBtnHtml = '';
             if (post.is_mine) {
                 deleteBtnHtml = `<button class="btn-delete-post" title="Delete Post" onclick="deletePost(${post.id})">🗑️</button>`;
@@ -1003,35 +1479,50 @@
                     <div class="post-author-info">
                         <div class="post-avatar">${initial}</div>
                         <div class="post-author-names">
-                            <span class="post-display-name">${escapeHtml(authorName)}</span>
+                            <span class="post-display-name">
+                                ${escapeHtml(authorName)}
+                                ${post.author.is_close_friend ? '<span title="Close Friend" style="color:var(--star-gold); font-size:0.9em;">⭐</span>' : ''}
+                            </span>
                             <span class="post-meta">@${escapeHtml(post.author.username)} &bull; ${formatTimeAgo(post.created_at)}</span>
                         </div>
                     </div>
-                    ${deleteBtnHtml}
+                    <div class="post-header-actions">
+                        ${authorSocialControls}
+                        ${deleteBtnHtml}
+                    </div>
                 </div>
                 <div class="post-content">${escapeHtml(post.content)}</div>
                 ${imageHtml}
                 ${recipeHtml}
                 <div class="post-action-bar">
-                    <button class="action-btn ${post.liked_by_me ? 'liked' : ''}" id="likeBtn-${post.id}" onclick="toggleLike(${post.id})">
-                        <span class="heart-icon">${post.liked_by_me ? '❤️' : '🤍'}</span>
-                        <span class="count" id="likeCount-${post.id}">${post.likes_count}</span>
-                    </button>
-                    <button class="action-btn" onclick="toggleComments(${post.id})">
-                        💬 <span class="count" id="commentCount-${post.id}">${post.comments_count}</span> Comments
-                    </button>
+                    <div class="action-btns-left">
+                        <button class="action-btn ${post.liked_by_me ? 'liked' : ''}" id="likeBtn-${post.id}" onclick="toggleLike(${post.id})">
+                            <span class="heart-icon">${post.liked_by_me ? '❤️' : '🤍'}</span>
+                            <span class="count" id="likeCount-${post.id}">${post.likes_count}</span>
+                        </button>
+                        <button class="action-btn" onclick="toggleComments(${post.id})">
+                            💬 <span class="count" id="commentCount-${post.id}">${post.comments_count}</span> Comments
+                        </button>
+                    </div>
+                    <button class="btn-report" onclick="reportPost(${post.id})" title="Report post to moderators">🚩 Report</button>
                 </div>
                 <div class="comments-section" id="commentsSection-${post.id}">
                     <div class="comments-list" id="commentsList-${post.id}">
                         <p style="font-size:0.85em; opacity:0.6;">Loading comments...</p>
                     </div>
                     ${currentUser ? `
+                        <div class="reply-target-banner" id="replyBanner-${post.id}">
+                            <span id="replyBannerText-${post.id}">Replying to @someone</span>
+                            <button type="button" onclick="cancelReplyTarget(${post.id})">&times; Cancel</button>
+                        </div>
                         <form class="comment-composer" onsubmit="submitComment(event, ${post.id})">
-                            <input type="text" class="comment-input" id="commentInput-${post.id}" placeholder="Write a comment..." required />
-                            <button type="submit" class="btn-add-comment">Post</button>
+                            <div class="comment-input-row">
+                                <input type="text" class="comment-input" id="commentInput-${post.id}" placeholder="Write a comment..." required />
+                                <button type="submit" class="btn-add-comment">Post</button>
+                            </div>
                         </form>
                     ` : `
-                        <p style="font-size:0.85em; opacity:0.7;"><a href="login.html?redirect=feed.html" style="color:var(--primary-pink);">Log in</a> to leave a comment.</p>
+                        <p style="font-size:0.85em; opacity:0.7;"><a href="login.html?redirect=feed.html" style="color:var(--primary-pink);">Log in</a> to leave a comment or reply.</p>
                     `}
                 </div>
             `;
@@ -1039,7 +1530,7 @@
             return card;
         }
 
-        // Create new post
+        // Create new post with direct photo upload support
         async function createPost() {
             if (!currentUser) {
                 window.location.href = 'login.html?redirect=feed.html';
@@ -1052,19 +1543,34 @@
             const btn = document.getElementById('btnPublishPost');
 
             const content = contentEl.value.trim();
-            const imageUrl = imgEl.value.trim();
+            let imageUrl = imgEl ? imgEl.value.trim() : '';
             const recipeId = recipeEl.value ? parseInt(recipeEl.value) : null;
 
-            if (!content) {
-                alert('Please write something before posting!');
+            if (!content && !selectedCompressedBlob && !imageUrl) {
+                alert('Please write something or attach a photo before posting!');
                 contentEl.focus();
                 return;
             }
 
             btn.disabled = true;
-            btn.textContent = 'Posting...';
+            btn.textContent = 'Publishing...';
 
             try {
+                // If a photo was selected/taken, upload it first
+                if (selectedCompressedBlob) {
+                    const formData = new FormData();
+                    formData.append('file', selectedCompressedBlob, 'upload.jpg');
+
+                    const uploadRes = await fetch('/api/upload/image', {
+                        method: 'POST',
+                        credentials: 'include',
+                        body: formData
+                    });
+                    const uploadData = await uploadRes.json();
+                    if (!uploadRes.ok) throw new Error(uploadData.error || 'Failed to upload photo');
+                    imageUrl = uploadData.image_url;
+                }
+
                 const res = await fetch('/api/community/posts', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1079,9 +1585,9 @@
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || 'Failed to publish post');
 
-                // Clear composer and reload
+                // Clear composer
                 contentEl.value = '';
-                imgEl.value = '';
+                removeSelectedPhoto();
                 recipeEl.value = '';
                 loadPosts();
             } catch (err) {
@@ -1143,7 +1649,177 @@
             }
         }
 
-        // Toggle comments section & load comments
+        // Friends & Close Friends Social Handlers
+        async function toggleFriend(friendId, postId) {
+            if (!currentUser) {
+                window.location.href = 'login.html?redirect=feed.html';
+                return;
+            }
+            try {
+                const checkRes = await fetch('/api/friends', { credentials: 'include' });
+                const friends = await checkRes.json();
+                const isCurrentlyFriend = friends.some(f => f.id === friendId);
+
+                const res = await fetch(`/api/friends/${friendId}`, {
+                    method: isCurrentlyFriend ? 'DELETE' : 'POST',
+                    credentials: 'include'
+                });
+                if (res.ok) {
+                    loadPosts();
+                }
+            } catch (err) {
+                alert('Friend update failed: ' + err.message);
+            }
+        }
+
+        async function toggleCloseFriend(friendId, postId) {
+            if (!currentUser) {
+                window.location.href = 'login.html?redirect=feed.html';
+                return;
+            }
+            try {
+                const res = await fetch(`/api/friends/${friendId}/toggle-close-friend`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                if (res.ok) {
+                    loadPosts();
+                }
+            } catch (err) {
+                alert('Close friend update failed: ' + err.message);
+            }
+        }
+
+        // Friend's Recipe Box Modal
+        async function openFriendRecipeBox(friendId, friendName) {
+            const modal = document.getElementById('friendBoxModal');
+            const titleEl = document.getElementById('friendBoxTitle');
+            const bodyEl = document.getElementById('friendBoxBody');
+
+            titleEl.textContent = `${friendName}'s Recipe Box`;
+            bodyEl.innerHTML = '<p style="text-align:center; padding: 25px;">Loading recipes...</p>';
+            modal.style.display = 'flex';
+
+            try {
+                const res = await fetch(`/api/users/${friendId}/recipes`, { credentials: 'include' });
+                if (!res.ok) throw new Error('Could not load recipe box');
+                const data = await res.json();
+
+                let accessBadge = '';
+                if (data.user.they_made_me_close_friend) {
+                    accessBadge = '<div style="background:var(--star-gold-bg); color:var(--star-gold); border:1px solid var(--star-gold); padding:8px 14px; border-radius:10px; margin-bottom:16px; font-weight:600; font-size:0.9em;">⭐ You have Close Friend VIP Access to this chef\'s full collection!</div>';
+                }
+
+                if (!data.recipes || data.recipes.length === 0) {
+                    bodyEl.innerHTML = `
+                        ${accessBadge}
+                        <div style="text-align:center; padding:30px; opacity:0.8;">
+                            <h3>🍽️ No recipes shared yet</h3>
+                            <p>${friendName} hasn't shared any recipes visible for your access level.</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                let cardsHtml = `
+                    ${accessBadge}
+                    <div class="friend-box-grid">
+                `;
+
+                data.recipes.forEach(r => {
+                    const isCF = r.visibility === 'close_friends';
+                    cardsHtml += `
+                        <div class="friend-box-recipe-card">
+                            <div>
+                                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                                    <span class="linked-recipe-badge">${escapeHtml(r.category || 'General')}</span>
+                                    ${isCF ? '<span class="badge-cf">⭐ Close Friends</span>' : ''}
+                                </div>
+                                <h4>${escapeHtml(r.title)}</h4>
+                                <div style="font-size:0.82em; opacity:0.75; margin-bottom:8px;">
+                                    ${r.prep_time ? `<span>⏱️ ${escapeHtml(r.prep_time)}</span> ` : ''}
+                                    ${r.cook_time ? `<span>🔥 ${escapeHtml(r.cook_time)}</span>` : ''}
+                                </div>
+                            </div>
+                            <div style="display:flex; gap:8px; justify-content:flex-end;">
+                                <button class="btn-view-recipe" onclick="openQuickRecipe('${r.share_token}')">👁️ View</button>
+                                <button class="btn-clone-recipe" onclick="cloneRecipe('${r.share_token}', this)">📥 Save</button>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                cardsHtml += '</div>';
+                bodyEl.innerHTML = cardsHtml;
+            } catch (err) {
+                bodyEl.innerHTML = `<p style="color:#e74c3c; text-align:center;">Failed to load recipes: ${err.message}</p>`;
+            }
+        }
+
+        function closeFriendBoxModal() {
+            document.getElementById('friendBoxModal').style.display = 'none';
+        }
+
+        // Moderation & Reporting
+        async function reportPost(postId) {
+            if (!currentUser) {
+                window.location.href = 'login.html?redirect=feed.html';
+                return;
+            }
+            if (!confirm('Report this post as inappropriate or spam?')) return;
+
+            try {
+                const res = await fetch(`/api/community/posts/${postId}/report`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ reason: 'inappropriate' })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    alert(data.message);
+                    if (data.quarantined) {
+                        const el = document.getElementById(`post-${postId}`);
+                        if (el) el.remove();
+                    }
+                } else {
+                    alert(data.error || 'Report failed');
+                }
+            } catch (err) {
+                alert('Report error: ' + err.message);
+            }
+        }
+
+        async function reportComment(commentId, postId) {
+            if (!currentUser) {
+                window.location.href = 'login.html?redirect=feed.html';
+                return;
+            }
+            if (!confirm('Report this comment as inappropriate or spam?')) return;
+
+            try {
+                const res = await fetch(`/api/community/comments/${commentId}/report`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ reason: 'inappropriate' })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    alert(data.message);
+                    if (data.quarantined) {
+                        const el = document.getElementById(`comment-${commentId}`);
+                        if (el) el.remove();
+                    }
+                } else {
+                    alert(data.error || 'Report failed');
+                }
+            } catch (err) {
+                alert('Report error: ' + err.message);
+            }
+        }
+
+        // Threaded Comments Handling
         async function toggleComments(postId) {
             const sec = document.getElementById(`commentsSection-${postId}`);
             const isOpen = sec.classList.contains('open');
@@ -1156,6 +1832,24 @@
             }
         }
 
+        function setReplyTarget(postId, commentId, username) {
+            activeReplyTargets[postId] = { parentId: commentId, username };
+            const banner = document.getElementById(`replyBanner-${postId}`);
+            const text = document.getElementById(`replyBannerText-${postId}`);
+            const input = document.getElementById(`commentInput-${postId}`);
+            if (banner && text && input) {
+                text.textContent = `Replying to @${username}`;
+                banner.style.display = 'flex';
+                input.focus();
+            }
+        }
+
+        function cancelReplyTarget(postId) {
+            delete activeReplyTargets[postId];
+            const banner = document.getElementById(`replyBanner-${postId}`);
+            if (banner) banner.style.display = 'none';
+        }
+
         async function loadComments(postId) {
             const list = document.getElementById(`commentsList-${postId}`);
             try {
@@ -1164,30 +1858,60 @@
                 const comments = await res.json();
 
                 if (comments.length === 0) {
-                    list.innerHTML = '<p style="font-size:0.85em; opacity:0.6; margin:4px 0;">No comments yet. Say something nice!</p>';
+                    list.innerHTML = '<p style="font-size:0.85em; opacity:0.6; margin:4px 0;">No comments yet. Say something nice or ask a question!</p>';
                     return;
                 }
 
                 list.innerHTML = '';
                 comments.forEach(c => {
-                    const item = document.createElement('div');
-                    item.className = 'comment-item';
-                    item.id = `comment-${c.id}`;
-                    item.innerHTML = `
-                        <div class="comment-header">
-                            <span class="comment-author">${escapeHtml(c.author.display_name || c.author.username)}</span>
-                            <span class="comment-meta">
-                                ${formatTimeAgo(c.created_at)}
-                                ${c.is_mine ? `<button class="btn-delete-comment" onclick="deleteComment(${c.id}, ${postId})" title="Delete Comment">&times;</button>` : ''}
-                            </span>
-                        </div>
-                        <div class="comment-body">${escapeHtml(c.comment)}</div>
-                    `;
-                    list.appendChild(item);
+                    list.appendChild(renderCommentNode(c, postId));
                 });
             } catch (err) {
                 list.innerHTML = `<p style="font-size:0.85em; color:#e74c3c;">Failed to load comments: ${err.message}</p>`;
             }
+        }
+
+        function renderCommentNode(c, postId) {
+            const node = document.createElement('div');
+            node.className = 'comment-node';
+
+            const item = document.createElement('div');
+            item.className = 'comment-item';
+            item.id = `comment-${c.id}`;
+
+            const authorName = c.author.display_name || c.author.username;
+            const replyTag = c.reply_to_username ? `<span class="comment-tag-reply">replying to @${escapeHtml(c.reply_to_username)}</span>` : '';
+
+            item.innerHTML = `
+                <div class="comment-header">
+                    <div class="comment-author-box">
+                        <span class="comment-author">${escapeHtml(authorName)}</span>
+                        ${replyTag}
+                    </div>
+                    <span class="comment-meta">
+                        ${formatTimeAgo(c.created_at)}
+                        ${c.is_mine ? `<button class="btn-delete-comment" onclick="deleteComment(${c.id}, ${postId})" title="Delete Comment">&times;</button>` : ''}
+                    </span>
+                </div>
+                <div class="comment-body">${escapeHtml(c.comment)}</div>
+                <div class="comment-actions-bar">
+                    ${currentUser ? `<button class="btn-comment-action" onclick="setReplyTarget(${postId}, ${c.id}, '${escapeHtml(c.author.username)}')">↪️ Reply</button>` : ''}
+                    <button class="btn-comment-action" style="color:#999;" onclick="reportComment(${c.id}, ${postId})">🚩 Report</button>
+                </div>
+            `;
+            node.appendChild(item);
+
+            // Render nested replies recursively
+            if (c.replies && c.replies.length > 0) {
+                const thread = document.createElement('div');
+                thread.className = 'comment-replies-thread';
+                c.replies.forEach(reply => {
+                    thread.appendChild(renderCommentNode(reply, postId));
+                });
+                node.appendChild(thread);
+            }
+
+            return node;
         }
 
         async function submitComment(e, postId) {
@@ -1196,17 +1920,26 @@
             const comment = input.value.trim();
             if (!comment) return;
 
+            const target = activeReplyTargets[postId] || {};
+            const parent_id = target.parentId || null;
+            const reply_to_username = target.username || '';
+
             input.disabled = true;
             try {
                 const res = await fetch(`/api/community/posts/${postId}/comments`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     credentials: 'include',
-                    body: JSON.stringify({ comment })
+                    body: JSON.stringify({
+                        comment,
+                        parent_id,
+                        reply_to_username
+                    })
                 });
                 const data = await res.json();
                 if (res.ok) {
                     input.value = '';
+                    cancelReplyTarget(postId);
                     loadComments(postId);
                     const countEl = document.getElementById(`commentCount-${postId}`);
                     if (countEl) countEl.textContent = parseInt(countEl.textContent || 0) + 1;
@@ -1229,8 +1962,7 @@
                     credentials: 'include'
                 });
                 if (res.ok) {
-                    const el = document.getElementById(`comment-${commentId}`);
-                    if (el) el.remove();
+                    loadComments(postId);
                     const countEl = document.getElementById(`commentCount-${postId}`);
                     if (countEl) {
                         const current = parseInt(countEl.textContent || 1);
@@ -1331,10 +2063,10 @@
 
         // Close modal on click outside
         window.addEventListener('click', (e) => {
-            const modal = document.getElementById('recipeQuickModal');
-            if (e.target === modal) {
-                closeRecipeModal();
-            }
+            const rModal = document.getElementById('recipeQuickModal');
+            const fModal = document.getElementById('friendBoxModal');
+            if (e.target === rModal) closeRecipeModal();
+            if (e.target === fModal) closeFriendBoxModal();
         });
     </script>
 </body>

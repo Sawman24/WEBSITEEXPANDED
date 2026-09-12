@@ -1540,6 +1540,14 @@
                             <option value="Drinks & Cocktails">Drinks & Cocktails</option>
                         </select>
                     </div>
+                    <div>
+                        <label for="recipeVisibility">👁️ Audience / Sharing:</label>
+                        <select id="recipeVisibility">
+                            <option value="public">🌍 Public (Community & Feed)</option>
+                            <option value="close_friends">⭐ Close Friends Only</option>
+                            <option value="private">🔒 Private (Only Me)</option>
+                        </select>
+                    </div>
                 </div>
 
                 <div class="form-grid" style="grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 8px;">
@@ -1819,6 +1827,13 @@
                     <option value="Baking & Bread">Baking & Bread</option>
                     <option value="Snacks & Smoothies">Snacks & Smoothies</option>
                     <option value="Drinks & Cocktails">Drinks & Cocktails</option>
+                </select>
+
+                <label for="editRecipeVisibility" style="font-weight:bold; color:var(--primary-pink); display:block; margin-bottom:5px;">👁️ Audience / Sharing:</label>
+                <select id="editRecipeVisibility" style="width:100%; padding:10px; margin-bottom:12px; border:1px solid var(--border-color); border-radius:6px; background:var(--background-color); color:var(--text-color); box-sizing:border-box;">
+                    <option value="public">🌍 Public (Community & Feed)</option>
+                    <option value="close_friends">⭐ Close Friends Only</option>
+                    <option value="private">🔒 Private (Only Me)</option>
                 </select>
 
                 <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin-bottom: 12px;">
@@ -2276,6 +2291,7 @@
                                 ${recipe.difficulty === 'Hard' ? '🔴 Hard' : (recipe.difficulty === 'Medium' ? '🟡 Medium' : '🟢 Easy')}
                             </span>
                             ${recipe.servings ? `<span class="meta-badge" title="Servings">👥 ${escapeHtml(recipe.servings)}</span>` : ''}
+                            ${recipe.visibility === 'close_friends' ? `<span class="meta-badge" style="background:#fff3cd; color:#856404; font-weight:600;" title="Visible to Close Friends">⭐ Close Friends</span>` : (recipe.visibility === 'private' ? `<span class="meta-badge" style="background:#e2e3e5; color:#383d41; font-weight:600;" title="Visible only to you">🔒 Private</span>` : `<span class="meta-badge" style="background:#d4edda; color:#155724; font-weight:600;" title="Publicly visible in Community Feed">🌍 Public</span>`)}
                         </div>
 
                         ${pantryBadgeHtml}
@@ -2757,6 +2773,7 @@
                 e.preventDefault();
                 const title = document.getElementById('recipeTitle').value.trim();
                 const category = document.getElementById('recipeCategory').value;
+                const visibility = document.getElementById('recipeVisibility').value;
                 const prep_time = document.getElementById('recipePrepTime').value.trim();
                 const cook_time = document.getElementById('recipeCookTime').value.trim();
                 const difficulty = document.getElementById('recipeDifficulty').value;
@@ -2768,7 +2785,7 @@
                     const res = await fetch('/api/recipes', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ title, category, prep_time, cook_time, difficulty, servings, ingredients, instructions })
+                        body: JSON.stringify({ title, category, visibility, prep_time, cook_time, difficulty, servings, ingredients, instructions })
                     });
                     if (res.ok) {
                         showToast('Recipe added successfully!', 'success');
@@ -2801,6 +2818,7 @@
                 }
                 catSelect.value = cat;
                 
+                document.getElementById('editRecipeVisibility').value = rec.visibility || 'public';
                 document.getElementById('editRecipePrepTime').value = rec.prep_time || '';
                 document.getElementById('editRecipeCookTime').value = rec.cook_time || '';
                 document.getElementById('editRecipeDifficulty').value = rec.difficulty || 'Easy';
@@ -2817,6 +2835,7 @@
                 const id = document.getElementById('editRecipeId').value;
                 const title = document.getElementById('editRecipeTitle').value.trim();
                 const category = document.getElementById('editRecipeCategory').value;
+                const visibility = document.getElementById('editRecipeVisibility').value;
                 const prep_time = document.getElementById('editRecipePrepTime').value.trim();
                 const cook_time = document.getElementById('editRecipeCookTime').value.trim();
                 const difficulty = document.getElementById('editRecipeDifficulty').value;
@@ -2828,7 +2847,7 @@
                     const res = await fetch(`/api/recipes/${id}`, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ title, category, prep_time, cook_time, difficulty, servings, ingredients, instructions })
+                        body: JSON.stringify({ title, category, visibility, prep_time, cook_time, difficulty, servings, ingredients, instructions })
                     });
                     if (res.ok) {
                         showToast('Recipe updated successfully!', 'success');

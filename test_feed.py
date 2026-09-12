@@ -194,11 +194,12 @@ class IntensiveVirtualUser:
             return r, r.status_code == 201
         track_req('1. Register User', do_register)
 
-        # 2. Create 2 Distinct Handcrafted Recipes
+        # 2. Create 2 Distinct Handcrafted Recipes (1 Public, 1 Close Friends)
         recipes_to_create = random.sample(RECIPES_DATABASE, 2)
         created_recipe_ids = []
-        for rec in recipes_to_create:
-            def do_add_rec(r_data=rec):
+        for i, rec in enumerate(recipes_to_create):
+            vis = 'close_friends' if i == 1 else 'public'
+            def do_add_rec(r_data=rec, v=vis):
                 r = self.session.post(f"{self.base_url}/api/recipes", json={
                     "title": f"{r_data['title']} (by {self.display_name})",
                     "category": r_data["category"],
@@ -207,7 +208,8 @@ class IntensiveVirtualUser:
                     "prep_time": r_data.get("prep_time", ""),
                     "cook_time": r_data.get("cook_time", ""),
                     "difficulty": r_data.get("difficulty", "Easy"),
-                    "servings": r_data.get("servings", "")
+                    "servings": r_data.get("servings", ""),
+                    "visibility": v
                 }, timeout=12)
                 if r.status_code == 201:
                     r_id = r.json().get("id")
@@ -216,56 +218,110 @@ class IntensiveVirtualUser:
                 return r, False
             track_req('2. Create Recipe', do_add_rec)
 
-        # 3. Generate Public Share Tokens
+        # 3. Direct Image Upload (Photo from Camera/Device)
+        uploaded_image_url = ""
+        def do_upload_photo():
+            nonlocal uploaded_image_url
+            import base64
+            fake_png = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82'
+            b64_img = "data:image/png;base64," + base64.b64encode(fake_png).decode('utf-8')
+            r = self.session.post(f"{self.base_url}/api/upload/image", json={"image_data": b64_img}, timeout=12)
+            if r.status_code == 201:
+                uploaded_image_url = r.json().get("image_url", "")
+                return r, True
+            return r, False
+        track_req('3. Upload Direct Photo', do_upload_photo)
+
+        # 4. Generate Public Share Tokens
         for r_id, _ in created_recipe_ids:
             def do_share(id_val=r_id):
                 r = self.session.post(f"{self.base_url}/api/recipes/{id_val}/share", timeout=12)
                 return r, r.status_code == 200
-            track_req('3. Share Recipe Token', do_share)
+            track_req('4. Share Recipe Token', do_share)
 
-        # 4. Post to Community Food Feed with Attached Recipe Card
+        # 5. Post to Community Food Feed with Attached Recipe Card & Uploaded Photo
         for r_id, r_data in created_recipe_ids:
             def do_feed_post(id_val=r_id, data_val=r_data):
                 r = self.session.post(f"{self.base_url}/api/community/posts", json={
-                    "content": f"{data_val['post_caption']} ~ Made with love by @{self.username}!",
-                    "image_url": data_val["image_url"],
+                    "content": f"{data_val['post_caption']} ~ Made fresh by @{self.username}!",
+                    "image_url": uploaded_image_url or data_val["image_url"],
                     "recipe_id": id_val
                 }, timeout=12)
                 return r, r.status_code == 201
-            track_req('4. Post to Feed', do_feed_post)
+            track_req('5. Post to Feed', do_feed_post)
 
-        # 5. Fetch Community Feed
+        # 6. Fetch Community Feed Across Filter Tabs
         feed_posts = []
-        def do_get_feed():
-            nonlocal feed_posts
-            r = self.session.get(f"{self.base_url}/api/community/posts?limit=50", timeout=12)
-            if r.status_code == 200:
-                feed_posts = r.json()
-                return r, True
-            return r, False
-        track_req('5. Browse Feed Stream', do_get_feed)
+        for tab_filter in ['all', 'trending', 'friends']:
+            def do_get_feed(f=tab_filter):
+                nonlocal feed_posts
+                r = self.session.get(f"{self.base_url}/api/community/posts?filter={f}&limit=50", timeout=12)
+                if r.status_code == 200:
+                    if f == 'all':
+                        feed_posts = r.json()
+                    return r, True
+                return r, False
+            track_req(f'6. Browse Feed ({tab_filter})', do_get_feed)
 
-        # 6. Like Community Posts
+        # 7. Follow Other Chefs & Star as Close Friends
+        if feed_posts:
+            other_authors = [p['author']['id'] for p in feed_posts if p.get('author') and not p.get('is_mine')]
+            if other_authors:
+                target_author = random.choice(other_authors)
+                def do_follow(a_id=target_author):
+                    r = self.session.post(f"{self.base_url}/api/friends/{a_id}", timeout=12)
+                    return r, r.status_code in (200, 201)
+                track_req('7. Follow Chef', do_follow)
+
+                def do_star_cf(a_id=target_author):
+                    r = self.session.post(f"{self.base_url}/api/friends/{a_id}/toggle-close-friend", timeout=12)
+                    return r, r.status_code == 200
+                track_req('8. Star Close Friend', do_star_cf)
+
+                # View Friend Recipe Box
+                def do_view_friend_box(a_id=target_author):
+                    r = self.session.get(f"{self.base_url}/api/users/{a_id}/recipes", timeout=12)
+                    return r, r.status_code == 200
+                track_req('9. View Friend Recipe Box', do_view_friend_box)
+
+        # 8. Like Community Posts
         if feed_posts:
             sample_posts = random.sample(feed_posts, min(len(feed_posts), 3))
             for p in sample_posts:
                 def do_like(p_id=p['id']):
                     r = self.session.post(f"{self.base_url}/api/community/posts/{p_id}/like", timeout=12)
                     return r, r.status_code == 200
-                track_req('6. Like Community Post', do_like)
+                track_req('10. Like Community Post', do_like)
 
-        # 7. Post Comments on Other Chefs' Recipes
+        # 9. Post Threaded Comments & Nested Replies
         if feed_posts:
             target_post = random.choice(feed_posts)
             comment_text = random.choice(COMMENTS_POOL)
+            c_id = None
             def do_comment(p_id=target_post['id'], c_text=comment_text):
+                nonlocal c_id
                 r = self.session.post(f"{self.base_url}/api/community/posts/{p_id}/comments", json={
                     "comment": c_text
                 }, timeout=12)
-                return r, r.status_code == 201
-            track_req('7. Comment on Post', do_comment)
+                if r.status_code == 201:
+                    c_id = r.json().get('comment', {}).get('id')
+                    return r, True
+                return r, False
+            track_req('11. Top Comment on Post', do_comment)
 
-        # 8. 1-Click Fork / Clone a Shared Recipe from the Feed
+            # Reply to that comment (Chained/Threaded comment)
+            if c_id:
+                reply_text = f"Totally agree @{self.username}! Great tip on the timing."
+                def do_reply(p_id=target_post['id'], parent=c_id, r_text=reply_text):
+                    r = self.session.post(f"{self.base_url}/api/community/posts/{p_id}/comments", json={
+                        "comment": r_text,
+                        "parent_id": parent,
+                        "reply_to_username": self.username
+                    }, timeout=12)
+                    return r, r.status_code == 201
+                track_req('12. Chained Reply Comment', do_reply)
+
+        # 10. 1-Click Fork / Clone a Shared Recipe from the Feed
         clonable_posts = [p for p in feed_posts if p.get('recipe') and p['recipe'].get('share_token')]
         if clonable_posts:
             target_clone = random.choice(clonable_posts)
@@ -273,9 +329,9 @@ class IntensiveVirtualUser:
             def do_clone(token=share_tok):
                 r = self.session.post(f"{self.base_url}/api/recipes/clone/{token}", timeout=12)
                 return r, r.status_code == 201
-            track_req('8. 1-Click Clone Recipe', do_clone)
+            track_req('13. 1-Click Clone Recipe', do_clone)
 
-        # 9. Meal Planner & Grocery Synchronization
+        # 11. Meal Planner & Grocery Synchronization
         def do_plan_meal():
             r = self.session.post(f"{self.base_url}/api/planner/2026-09-18", json={
                 "meals": {
@@ -287,16 +343,16 @@ class IntensiveVirtualUser:
                 "notes": "Community dinner party!"
             }, timeout=12)
             return r, r.status_code == 200
-        track_req('9. Sync Meal Planner', do_plan_meal)
+        track_req('14. Sync Meal Planner', do_plan_meal)
 
         def do_add_groceries():
             r = self.session.post(f"{self.base_url}/api/groceries", json={
                 "item": "Potato Gnocchi\nHeavy Cream\nSpinach\nParmesan\nSourdough Bread\nAvocados\nSalmon Fillets"
             }, timeout=12)
             return r, r.status_code == 201
-        track_req('10. Add Groceries', do_add_groceries)
+        track_req('15. Add Groceries', do_add_groceries)
 
-        # 10. Dashboard Read Multi-Query (Simulate Loading index.html)
+        # 12. Dashboard Read Multi-Query (Simulate Loading index.html)
         def do_read_dashboard():
             r1 = self.session.get(f"{self.base_url}/api/recipes", timeout=12)
             r2 = self.session.get(f"{self.base_url}/api/planner", timeout=12)
@@ -304,7 +360,7 @@ class IntensiveVirtualUser:
             r4 = self.session.get(f"{self.base_url}/api/community/posts?limit=3", timeout=12)
             ok = (r1.status_code == 200 and r2.status_code == 200 and r3.status_code == 200 and r4.status_code == 200)
             return r4, ok
-        track_req('11. Full Dashboard Sync', do_read_dashboard)
+        track_req('16. Full Dashboard Sync', do_read_dashboard)
 
         return latencies, errors
 
