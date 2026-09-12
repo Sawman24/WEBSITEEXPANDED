@@ -1021,6 +1021,15 @@
             background-color: #c82333;
         }
 
+        .btn-share {
+            background-color: #3b82f6;
+            color: white;
+        }
+
+        .btn-share:hover {
+            background-color: #2563eb;
+        }
+
         /* --- Cook Mode Modal (Full-Screen Focus for Large Recipes) --- */
         .cook-modal {
             display: none;
@@ -1475,6 +1484,7 @@
                 <li><a href="index.html">Home</a></li>
                 <li><a href="recipes.html" class="active">My Recipes</a></li>
                 <li><a href="planner.html">Planner</a></li>
+                <li><a href="feed.html">Community Feed</a></li>
             </ul>
         </nav>
     </header>
@@ -1845,6 +1855,25 @@
                     <button type="submit" style="background:var(--primary-pink); color:white; border:none; padding:9px 18px; border-radius:20px; cursor:pointer; font-weight:bold;">Save Changes</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Share Recipe Modal -->
+    <div id="shareRecipeModal" class="edit-modal" style="display:none;">
+        <div class="edit-modal-content" style="max-width:480px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border-color); padding-bottom:10px; margin-bottom:16px;">
+                <h3 id="shareModalTitle" style="margin:0; font-family:'Playfair Display', serif; color:var(--primary-pink);">🔗 Share Recipe</h3>
+                <button type="button" id="closeShareModalBtn" onclick="closeShareModal()" style="background:none; border:none; font-size:1.6em; cursor:pointer; color:var(--text-color); line-height:1;">&times;</button>
+            </div>
+            <p style="font-size:0.92em; margin-top:0; opacity:0.85;">Anyone with this link can view this recipe and 1-click clone it into their own box:</p>
+            <div style="display:flex; gap:8px; margin-bottom:18px;">
+                <input type="text" id="shareUrlInput" readonly style="flex:1; padding:10px 12px; border:1px solid var(--border-color); border-radius:8px; background:var(--background-color); color:var(--text-color); font-size:0.9em;" onclick="this.select()" />
+                <button type="button" id="btnCopyShareModalLink" onclick="copyShareModalLink()" style="background:var(--primary-pink); color:white; border:none; padding:10px 16px; border-radius:8px; font-weight:bold; cursor:pointer;">Copy</button>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
+                <a id="btnOpenPublicShare" href="#" target="_blank" style="color:var(--primary-pink); text-decoration:none; font-weight:600; font-size:0.9em; display:inline-flex; align-items:center; gap:4px; padding:6px 0;">👁️ Open Standalone View &rarr;</a>
+                <a id="btnShareToFeed" href="feed.html" style="background:var(--light-pink); color:var(--primary-pink); text-decoration:none; font-weight:600; font-size:0.9em; padding:8px 16px; border-radius:20px;">🍲 Post to Community</a>
+            </div>
         </div>
     </div>
 
@@ -2267,6 +2296,7 @@
                         <div class="card-actions">
                             <button class="btn-action btn-cook" data-cook-id="${recipe.id}">🍳 Cook Mode</button>
                             <button class="btn-action btn-grocery" data-grocery-id="${recipe.id}" title="Add ingredients to Grocery List">🛒 +Grocery</button>
+                            <button class="btn-action btn-share" data-share-id="${recipe.id}" title="Share recipe link with friends or community">🔗 Share</button>
                             <button class="btn-action btn-edit" data-edit-id="${recipe.id}">✏️ Edit</button>
                             <button class="btn-action btn-delete" data-del-id="${recipe.id}">Delete</button>
                         </div>
@@ -2363,6 +2393,15 @@
                     });
                 });
 
+                // Share
+                document.querySelectorAll('.btn-share').forEach(b => {
+                    b.addEventListener('click', async (e) => {
+                        const btn = e.currentTarget;
+                        const id = parseInt(btn.dataset.shareId);
+                        openShareModal(id);
+                    });
+                });
+
                 // Delete
                 document.querySelectorAll('.btn-delete').forEach(b => {
                     b.addEventListener('click', async (e) => {
@@ -2377,6 +2416,67 @@
                             }
                         }
                     });
+                });
+            }
+
+            // Share Modal Logic
+            window.openShareModal = async function(recipeId) {
+                const rec = allRecipesData.find(r => r.id === recipeId);
+                if (!rec) return;
+
+                const modal = document.getElementById('shareRecipeModal');
+                const titleEl = document.getElementById('shareModalTitle');
+                const urlInp = document.getElementById('shareUrlInput');
+                const openLink = document.getElementById('btnOpenPublicShare');
+
+                titleEl.textContent = `🔗 Share "${rec.title}"`;
+                urlInp.value = 'Generating share link...';
+                modal.style.display = 'flex';
+
+                try {
+                    const res = await fetch(`/api/recipes/${recipeId}/share`, {
+                        method: 'POST',
+                        credentials: 'include'
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        rec.share_token = data.share_token;
+                        urlInp.value = data.share_url;
+                        openLink.href = data.share_url;
+                    } else {
+                        urlInp.value = 'Failed to generate link';
+                        showToast('Could not generate share link', 'error');
+                    }
+                } catch (err) {
+                    urlInp.value = 'Error generating link';
+                    showToast('Error sharing recipe', 'error');
+                }
+            };
+
+            window.closeShareModal = function() {
+                const modal = document.getElementById('shareRecipeModal');
+                if (modal) modal.style.display = 'none';
+            };
+
+            window.copyShareModalLink = function() {
+                const input = document.getElementById('shareUrlInput');
+                input.select();
+                navigator.clipboard.writeText(input.value).then(() => {
+                    showToast('📋 Share link copied to clipboard!', 'success');
+                    const btn = document.getElementById('btnCopyShareModalLink');
+                    if (btn) {
+                        btn.textContent = 'Copied!';
+                        setTimeout(() => btn.textContent = 'Copy', 2000);
+                    }
+                }).catch(() => {
+                    prompt('Copy link:', input.value);
+                });
+            };
+
+            const shareModalEl = document.getElementById('shareRecipeModal');
+            if (shareModalEl) {
+                shareModalEl.addEventListener('click', (e) => {
+                    if (e.target === shareModalEl) window.closeShareModal();
                 });
             }
 

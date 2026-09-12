@@ -300,7 +300,7 @@
 
     <div class="login-container">
         <div class="auth-card">
-            <div class="auth-tabs">
+            <div class="auth-tabs" id="authTabsHeader">
                 <button class="auth-tab-btn active" id="tabLoginBtn" onclick="switchAuthTab('login')">🔑 Log In</button>
                 <button class="auth-tab-btn" id="tabRegisterBtn" onclick="switchAuthTab('register')">✨ Create Account</button>
             </div>
@@ -314,7 +314,10 @@
                     <input type="text" id="loginUsername" placeholder="e.g. Michaela or chef@home.com" required autofocus autocomplete="username" />
                 </div>
                 <div class="form-group">
-                    <label for="loginPassword">Password</label>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <label for="loginPassword" style="margin: 0;">Password</label>
+                        <a href="javascript:void(0)" onclick="switchAuthTab('forgot')" style="font-size: 0.8em; color: var(--primary-pink); text-decoration: none; font-weight: 600;">Forgot Password?</a>
+                    </div>
                     <input type="password" id="loginPassword" placeholder="••••••••" required autocomplete="current-password" />
                 </div>
                 <button type="submit" class="auth-submit-btn" id="loginSubmitBtn">Log In &rarr;</button>
@@ -341,6 +344,41 @@
                 <button type="submit" class="auth-submit-btn" id="regSubmitBtn">Create Account &rarr;</button>
             </form>
 
+            <!-- Forgot Password Form -->
+            <form id="forgotForm" onsubmit="handleForgotPassword(event)" style="display: none;">
+                <p style="font-size: 0.9em; margin-top: 0; opacity: 0.85;">
+                    Enter your username or email address and we'll send you a link to reset your password.
+                </p>
+                <div class="form-group">
+                    <label for="forgotIdentifier">Username or Email</label>
+                    <input type="text" id="forgotIdentifier" placeholder="e.g. Michaela or michaela@example.com" required />
+                </div>
+                <button type="submit" class="auth-submit-btn" id="forgotSubmitBtn">Send Reset Link &rarr;</button>
+                <div style="text-align: center; margin-top: 14px;">
+                    <a href="javascript:void(0)" onclick="switchAuthTab('login')" style="font-size: 0.88em; color: var(--primary-pink); text-decoration: none; font-weight: 600;">&larr; Back to Log In</a>
+                </div>
+            </form>
+
+            <!-- Reset Password Form (When opening with ?reset_token=xyz) -->
+            <form id="resetForm" onsubmit="handleResetPassword(event)" style="display: none;">
+                <p style="font-size: 0.9em; margin-top: 0; opacity: 0.85;">
+                    Enter a new password for your account.
+                </p>
+                <input type="hidden" id="resetTokenHidden" />
+                <div class="form-group">
+                    <label for="resetNewPassword">New Password (min. 8 characters)</label>
+                    <input type="password" id="resetNewPassword" placeholder="••••••••" required minlength="8" autocomplete="new-password" />
+                </div>
+                <div class="form-group">
+                    <label for="resetConfirmPassword">Confirm New Password</label>
+                    <input type="password" id="resetConfirmPassword" placeholder="••••••••" required minlength="8" autocomplete="new-password" />
+                </div>
+                <button type="submit" class="auth-submit-btn" id="resetSubmitBtn">Update Password &rarr;</button>
+                <div style="text-align: center; margin-top: 14px;">
+                    <a href="javascript:void(0)" onclick="switchAuthTab('login')" style="font-size: 0.88em; color: var(--primary-pink); text-decoration: none; font-weight: 600;">&larr; Back to Log In</a>
+                </div>
+            </form>
+
             <div class="auth-footer-note" id="authFooterNote">
                 🔒 Secure encrypted session &bull; Your recipes and meal plans are private to you.
             </div>
@@ -353,42 +391,66 @@
 
     <script src="auth.js"></script>
     <script>
-        // Check if already logged in -> redirect
-        window.Auth.init().then(user => {
-            if (user) {
-                const urlParams = new URLSearchParams(window.location.search);
-                const redirectUrl = urlParams.get('redirect') || 'index.html';
-                window.location.href = redirectUrl;
-            }
-        });
+        const urlParams = new URLSearchParams(window.location.search);
+        const resetTokenFromUrl = urlParams.get('reset_token');
+
+        if (resetTokenFromUrl) {
+            // Automatically switch to password reset view
+            switchAuthTab('reset');
+            document.getElementById('resetTokenHidden').value = resetTokenFromUrl;
+        } else {
+            // Check if already logged in -> redirect
+            window.Auth.init().then(user => {
+                if (user) {
+                    const redirectUrl = urlParams.get('redirect') || 'index.html';
+                    window.location.href = redirectUrl;
+                }
+            });
+        }
 
         function switchAuthTab(tab) {
             const loginBtn = document.getElementById('tabLoginBtn');
             const regBtn = document.getElementById('tabRegisterBtn');
+            const tabsHeader = document.getElementById('authTabsHeader');
             const loginForm = document.getElementById('loginForm');
             const registerForm = document.getElementById('registerForm');
+            const forgotForm = document.getElementById('forgotForm');
+            const resetForm = document.getElementById('resetForm');
             const alertBox = document.getElementById('authAlert');
             alertBox.style.display = 'none';
 
+            loginForm.style.display = 'none';
+            registerForm.style.display = 'none';
+            forgotForm.style.display = 'none';
+            resetForm.style.display = 'none';
+
             if (tab === 'login') {
+                tabsHeader.style.display = 'flex';
                 loginBtn.classList.add('active');
                 regBtn.classList.remove('active');
                 loginForm.style.display = 'block';
-                registerForm.style.display = 'none';
                 document.getElementById('loginUsername').focus();
-            } else {
+            } else if (tab === 'register') {
+                tabsHeader.style.display = 'flex';
                 loginBtn.classList.remove('active');
                 regBtn.classList.add('active');
-                loginForm.style.display = 'none';
                 registerForm.style.display = 'block';
                 document.getElementById('regUsername').focus();
+            } else if (tab === 'forgot') {
+                tabsHeader.style.display = 'none';
+                forgotForm.style.display = 'block';
+                document.getElementById('forgotIdentifier').focus();
+            } else if (tab === 'reset') {
+                tabsHeader.style.display = 'none';
+                resetForm.style.display = 'block';
+                document.getElementById('resetNewPassword').focus();
             }
         }
 
         function showAlert(msg, isSuccess = false) {
             const el = document.getElementById('authAlert');
             el.className = 'auth-alert ' + (isSuccess ? 'success' : 'error');
-            el.textContent = msg;
+            el.innerHTML = msg;
             el.style.display = 'block';
         }
 
@@ -405,7 +467,6 @@
             try {
                 const user = await window.Auth.login(username, password);
                 showAlert(`Welcome back, ${user.display_name || user.username}! Redirecting...`, true);
-                const urlParams = new URLSearchParams(window.location.search);
                 const redirectUrl = urlParams.get('redirect') || 'index.html';
                 setTimeout(() => {
                     window.location.href = redirectUrl;
@@ -413,7 +474,7 @@
             } catch (err) {
                 showAlert(err.message || 'Invalid username or password');
                 btn.disabled = false;
-                btn.textContent = 'Log In →';
+                btn.textContent = 'Log In \u2192';
             }
         }
 
@@ -432,7 +493,6 @@
             try {
                 const user = await window.Auth.register(username, email, password, displayName);
                 showAlert(`Account created successfully! Welcome, ${user.display_name || user.username}!`, true);
-                const urlParams = new URLSearchParams(window.location.search);
                 const redirectUrl = urlParams.get('redirect') || 'index.html';
                 setTimeout(() => {
                     window.location.href = redirectUrl;
@@ -440,7 +500,75 @@
             } catch (err) {
                 showAlert(err.message || 'Failed to create account');
                 btn.disabled = false;
-                btn.textContent = 'Create Account →';
+                btn.textContent = 'Create Account \u2192';
+            }
+        }
+
+        async function handleForgotPassword(e) {
+            e.preventDefault();
+            const btn = document.getElementById('forgotSubmitBtn');
+            const identifier = document.getElementById('forgotIdentifier').value.trim();
+
+            btn.disabled = true;
+            btn.textContent = 'Sending link...';
+            document.getElementById('authAlert').style.display = 'none';
+
+            try {
+                const res = await fetch('/api/auth/forgot-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: identifier })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Failed to request reset');
+
+                let successMsg = `✉️ If an account matches "${identifier}", a reset link has been sent.`;
+                if (data.dev_reset_url) {
+                    successMsg += `<br><br><small><strong>Dev Preview Link:</strong> <a href="${data.dev_reset_url}" style="color:inherit; text-decoration:underline;">Click here to reset password</a></small>`;
+                }
+                showAlert(successMsg, true);
+                document.getElementById('forgotIdentifier').value = '';
+            } catch (err) {
+                showAlert(err.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Send Reset Link \u2192';
+            }
+        }
+
+        async function handleResetPassword(e) {
+            e.preventDefault();
+            const btn = document.getElementById('resetSubmitBtn');
+            const token = document.getElementById('resetTokenHidden').value.trim();
+            const newPassword = document.getElementById('resetNewPassword').value;
+            const confirmPassword = document.getElementById('resetConfirmPassword').value;
+
+            if (newPassword !== confirmPassword) {
+                showAlert('Passwords do not match. Please try again.');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = 'Updating password...';
+            document.getElementById('authAlert').style.display = 'none';
+
+            try {
+                const res = await fetch('/api/auth/reset-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token, new_password: newPassword })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Failed to reset password');
+
+                showAlert('✅ Password has been reset successfully! You can now log in.', true);
+                setTimeout(() => {
+                    switchAuthTab('login');
+                }, 1500);
+            } catch (err) {
+                showAlert(err.message);
+                btn.disabled = false;
+                btn.textContent = 'Update Password \u2192';
             }
         }
     </script>

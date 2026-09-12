@@ -194,6 +194,54 @@ def init_db():
         cursor.execute('DROP TABLE planner')
         cursor.execute('ALTER TABLE planner_v2 RENAME TO planner')
 
+    # Password Resets Table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS password_resets (
+            token TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            expires_at TIMESTAMP NOT NULL,
+            used INTEGER DEFAULT 0
+        )
+    ''')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_resets(user_id)')
+
+    # Community Food Feed Posts Table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS community_posts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            content TEXT NOT NULL,
+            image_url TEXT DEFAULT '',
+            recipe_id INTEGER REFERENCES recipes(id) ON DELETE SET NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_community_posts_user ON community_posts(user_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_community_posts_created ON community_posts(created_at DESC)')
+
+    # Post Likes Table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS post_likes (
+            post_id INTEGER NOT NULL REFERENCES community_posts(id) ON DELETE CASCADE,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (post_id, user_id)
+        )
+    ''')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_post_likes_post ON post_likes(post_id)')
+
+    # Post Comments Table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS post_comments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            post_id INTEGER NOT NULL REFERENCES community_posts(id) ON DELETE CASCADE,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            comment TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_post_comments_post ON post_comments(post_id)')
+
     # Auto-migrate columns if tables already exist without user_id or recipe meta columns
     recipe_columns = [col[1] for col in cursor.execute('PRAGMA table_info(recipes)').fetchall()]
     if 'user_id' not in recipe_columns:
@@ -210,6 +258,8 @@ def init_db():
         cursor.execute("ALTER TABLE recipes ADD COLUMN difficulty TEXT DEFAULT 'Easy'")
     if 'servings' not in recipe_columns:
         cursor.execute("ALTER TABLE recipes ADD COLUMN servings TEXT DEFAULT ''")
+    if 'share_token' not in recipe_columns:
+        cursor.execute("ALTER TABLE recipes ADD COLUMN share_token TEXT")
 
     grocery_columns = [col[1] for col in cursor.execute('PRAGMA table_info(groceries)').fetchall()]
     if 'user_id' not in grocery_columns:
@@ -225,6 +275,7 @@ def init_db():
 
     # Create Indexes for Multi-Tenant performance
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_recipes_user ON recipes(user_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_recipes_share_token ON recipes(share_token)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_planner_user ON planner(user_id)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_planner_user_date ON planner(user_id, date_key)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_groceries_user ON groceries(user_id)')
@@ -1146,6 +1197,173 @@ def update_user_profile():
     conn.close()
     return jsonify({'message': 'Profile updated successfully'}), 200
 
+def send_password_reset_email(to_email, reset_url):
+    resend_api_key = os.environ.get('RESEND_API_KEY')
+    smtp_host = os.environ.get('SMTP_HOST')
+    email_from = os.environ.get('EMAIL_FROM', 'recipes@michaela.local')
+    
+    subject = "Reset Your Password - Virtual Recipe Box"
+    html_content = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 540px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+        <h2 style="color: #FF6B81; margin-top: 0;">Password Reset Request</h2>
+        <p>Hello,</p>
+        <p>We received a request to reset the password for your Virtual Recipe Box account.</p>
+        <p style="margin: 25px 0;">
+            <a href="{reset_url}" style="background-color: #FF6B81; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Reset Password</a>
+        </p>
+        <p style="color: #666; font-size: 0.9em;">Or copy and paste this link into your browser:<br><a href="{reset_url}">{reset_url}</a></p>
+        <p style="color: #999; font-size: 0.8em; margin-top: 30px;">This link will expire in 1 hour. If you did not request a password reset, you can safely ignore this email.</p>
+    </div>
+    """
+    
+    if resend_api_key:
+        try:
+            resp = requests.post(
+                "https://api.resend.com/emails",
+                headers={
+                    "Authorization": f"Bearer {resend_api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "from": os.environ.get('RESEND_FROM', 'onboarding@resend.dev'),
+                    "to": [to_email],
+                    "subject": subject,
+                    "html": html_content
+                },
+                timeout=10
+            )
+            if resp.status_code in (200, 201):
+                return True, "Email sent via Resend"
+            else:
+                print(f"[EMAIL ERROR] Resend returned {resp.status_code}: {resp.text}")
+        except Exception as e:
+            print(f"[EMAIL ERROR] Failed to send email via Resend: {e}")
+            
+    elif smtp_host:
+        try:
+            import smtplib
+            from email.mime.text import MIMEText
+            from email.mime.multipart import MIMEMultipart
+            
+            smtp_port = int(os.environ.get('SMTP_PORT', 587))
+            smtp_user = os.environ.get('SMTP_USER', '')
+            smtp_pass = os.environ.get('SMTP_PASS', '')
+            
+            msg = MIMEMultipart('alternative')
+            msg['Subject'] = subject
+            msg['From'] = email_from
+            msg['To'] = to_email
+            msg.attach(MIMEText(html_content, 'html'))
+            
+            with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as server:
+                if os.environ.get('SMTP_TLS', 'true').lower() in ('true', '1'):
+                    server.starttls()
+                if smtp_user and smtp_pass:
+                    server.login(smtp_user, smtp_pass)
+                server.sendmail(email_from, [to_email], msg.as_string())
+            return True, "Email sent via SMTP"
+        except Exception as e:
+            print(f"[EMAIL ERROR] Failed to send email via SMTP: {e}")
+    
+    # Dev / local stdout fallback
+    print(f"\n==================================================")
+    print(f"🔑 [PASSWORD RESET EMAIL FOR {to_email}]")
+    print(f"🔗 Reset URL: {reset_url}")
+    print(f"==================================================\n")
+    return True, "Reset link logged (Dev mode)"
+
+@app.route('/api/auth/forgot-password', methods=['POST'])
+def forgot_password():
+    data = request.get_json() or {}
+    identifier = (data.get('email') or data.get('username') or '').strip()
+    if not identifier:
+        return jsonify({'error': 'Email or username is required'}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    user = cursor.execute(
+        'SELECT id, username, email FROM users WHERE LOWER(email) = ? OR LOWER(username) = ?',
+        (identifier.lower(), identifier.lower())
+    ).fetchone()
+
+    if not user:
+        conn.close()
+        # Security: Do not leak whether user exists
+        return jsonify({'message': 'If an account exists with that information, a password reset link has been sent.'}), 200
+
+    user_id = user['id']
+    user_email = user['email']
+
+    # Generate secure reset token
+    reset_token = secrets.token_urlsafe(32)
+    expires_at = (datetime.now(timezone.utc) + timedelta(hours=1)).strftime('%Y-%m-%d %H:%M:%S')
+
+    cursor.execute(
+        'INSERT INTO password_resets (token, user_id, expires_at, used) VALUES (?, ?, ?, 0)',
+        (reset_token, user_id, expires_at)
+    )
+    conn.commit()
+    conn.close()
+
+    # Determine site base URL
+    origin = request.headers.get('Origin') or request.headers.get('Referer')
+    if origin:
+        from urllib.parse import urlparse
+        parsed = urlparse(origin)
+        base_url = f"{parsed.scheme}://{parsed.netloc}"
+    else:
+        base_url = request.host_url.rstrip('/')
+
+    reset_url = f"{base_url}/login.html?reset_token={reset_token}"
+    send_password_reset_email(user_email, reset_url)
+
+    resp_data = {
+        'message': 'If an account exists with that information, a password reset link has been sent.'
+    }
+    # Provide token preview if neither Resend nor SMTP is configured (for local testing convenience)
+    if not os.environ.get('RESEND_API_KEY') and not os.environ.get('SMTP_HOST'):
+        resp_data['dev_reset_token'] = reset_token
+        resp_data['dev_reset_url'] = reset_url
+
+    return jsonify(resp_data), 200
+
+@app.route('/api/auth/reset-password', methods=['POST'])
+def reset_password():
+    data = request.get_json() or {}
+    token = data.get('token', '').strip()
+    new_password = data.get('new_password', '')
+
+    if not token:
+        return jsonify({'error': 'Reset token is required'}), 400
+    if not new_password or len(new_password) < 8:
+        return jsonify({'error': 'New password must be at least 8 characters long'}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    now_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+
+    reset_row = cursor.execute(
+        'SELECT token, user_id, expires_at, used FROM password_resets WHERE token = ?',
+        (token,)
+    ).fetchone()
+
+    if not reset_row or reset_row['used'] == 1 or reset_row['expires_at'] <= now_str:
+        conn.close()
+        return jsonify({'error': 'Invalid or expired password reset link. Please request a new one.'}), 400
+
+    user_id = reset_row['user_id']
+    new_hash = generate_password_hash(new_password)
+
+    # Update password, mark token used, and revoke existing sessions for security
+    cursor.execute('UPDATE users SET password_hash = ? WHERE id = ?', (new_hash, user_id))
+    cursor.execute('UPDATE password_resets SET used = 1 WHERE token = ?', (token,))
+    cursor.execute('DELETE FROM sessions WHERE user_id = ?', (user_id,))
+
+    conn.commit()
+    conn.close()
+
+    return jsonify({'message': 'Password has been successfully reset! You can now log in with your new password.'}), 200
+
 # --- Recipe Endpoints ---
 
 @app.route('/api/recipes/import-url', methods=['POST'])
@@ -1195,7 +1413,8 @@ def get_recipes():
             'prep_time': recipe['prep_time'] if 'prep_time' in keys else '',
             'cook_time': recipe['cook_time'] if 'cook_time' in keys else '',
             'difficulty': recipe['difficulty'] if 'difficulty' in keys else 'Easy',
-            'servings': recipe['servings'] if 'servings' in keys else ''
+            'servings': recipe['servings'] if 'servings' in keys else '',
+            'share_token': recipe['share_token'] if 'share_token' in keys else None
         })
     return jsonify(recipes_list)
 
@@ -1218,7 +1437,8 @@ def get_recipe(recipe_id):
             'prep_time': recipe['prep_time'] if 'prep_time' in keys else '',
             'cook_time': recipe['cook_time'] if 'cook_time' in keys else '',
             'difficulty': recipe['difficulty'] if 'difficulty' in keys else 'Easy',
-            'servings': recipe['servings'] if 'servings' in keys else ''
+            'servings': recipe['servings'] if 'servings' in keys else '',
+            'share_token': recipe['share_token'] if 'share_token' in keys else None
         })
     return jsonify({'error': 'Recipe not found'}), 404
 
@@ -1354,6 +1574,344 @@ def delete_recipe(recipe_id):
         conn.rollback()
         conn.close()
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/recipes/<int:recipe_id>/share', methods=['POST'])
+@login_required
+def share_recipe(recipe_id):
+    user_id = request.current_user['id']
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    recipe = cursor.execute('SELECT id, share_token FROM recipes WHERE id = ? AND user_id = ?', (recipe_id, user_id)).fetchone()
+    if not recipe:
+        conn.close()
+        return jsonify({'error': 'Recipe not found or unauthorized'}), 404
+
+    share_token = recipe['share_token']
+    if not share_token:
+        share_token = secrets.token_urlsafe(16)
+        cursor.execute('UPDATE recipes SET share_token = ? WHERE id = ?', (share_token, recipe_id))
+        conn.commit()
+
+    conn.close()
+
+    # Determine site base URL
+    origin = request.headers.get('Origin') or request.headers.get('Referer')
+    if origin:
+        from urllib.parse import urlparse
+        parsed = urlparse(origin)
+        base_url = f"{parsed.scheme}://{parsed.netloc}"
+    else:
+        base_url = request.host_url.rstrip('/')
+
+    share_url = f"{base_url}/share.html?token={share_token}"
+    return jsonify({
+        'share_token': share_token,
+        'share_url': share_url,
+        'relative_url': f"share.html?token={share_token}"
+    }), 200
+
+@app.route('/api/public/recipes/<string:share_token>', methods=['GET'])
+def get_public_recipe(share_token):
+    conn = get_db_connection()
+    recipe = conn.execute('''
+        SELECT r.*, u.username as author_username, u.display_name as author_display_name
+        FROM recipes r
+        LEFT JOIN users u ON r.user_id = u.id
+        WHERE r.share_token = ?
+    ''', (share_token,)).fetchone()
+    conn.close()
+
+    if not recipe:
+        return jsonify({'error': 'Recipe not found or share link is invalid'}), 404
+
+    keys = recipe.keys()
+    author_name = recipe['author_display_name'] or recipe['author_username'] or 'A Fellow Cook'
+    return jsonify({
+        'id': recipe['id'],
+        'title': recipe['title'],
+        'ingredients': recipe['ingredients'],
+        'instructions': recipe['instructions'],
+        'category': recipe['category'] if 'category' in keys else 'General',
+        'prep_time': recipe['prep_time'] if 'prep_time' in keys else '',
+        'cook_time': recipe['cook_time'] if 'cook_time' in keys else '',
+        'difficulty': recipe['difficulty'] if 'difficulty' in keys else 'Easy',
+        'servings': recipe['servings'] if 'servings' in keys else '',
+        'share_token': recipe['share_token'],
+        'author': {
+            'username': recipe['author_username'] if 'author_username' in keys else '',
+            'display_name': author_name
+        }
+    }), 200
+
+@app.route('/api/recipes/clone/<string:share_token>', methods=['POST'])
+@login_required
+def clone_recipe(share_token):
+    user_id = request.current_user['id']
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    recipe = cursor.execute('SELECT * FROM recipes WHERE share_token = ?', (share_token,)).fetchone()
+    if not recipe:
+        conn.close()
+        return jsonify({'error': 'Shared recipe not found or invalid link'}), 404
+
+    keys = recipe.keys()
+    cursor.execute('''
+        INSERT INTO recipes (user_id, title, ingredients, instructions, category, is_favorite, prep_time, cook_time, difficulty, servings)
+        VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
+    ''', (
+        user_id,
+        recipe['title'],
+        recipe['ingredients'],
+        recipe['instructions'],
+        recipe['category'] if 'category' in keys else 'General',
+        recipe['prep_time'] if 'prep_time' in keys else '',
+        recipe['cook_time'] if 'cook_time' in keys else '',
+        recipe['difficulty'] if 'difficulty' in keys else 'Easy',
+        recipe['servings'] if 'servings' in keys else ''
+    ))
+    new_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+
+    return jsonify({
+        'message': f'"{recipe["title"]}" successfully saved to your Recipe Box!',
+        'recipe_id': new_id
+    }), 201
+
+# --- Community Food Feed Endpoints ---
+
+@app.route('/api/community/posts', methods=['GET'])
+def get_community_posts():
+    user = get_authenticated_user()
+    current_user_id = user['id'] if user else None
+
+    limit = min(max(int(request.args.get('limit', 50)), 1), 100)
+    offset = max(int(request.args.get('offset', 0)), 0)
+
+    conn = get_db_connection()
+    query = '''
+        SELECT 
+            p.id, p.user_id, p.content, p.image_url, p.recipe_id, p.created_at,
+            u.username as author_username, u.display_name as author_display_name,
+            (SELECT COUNT(*) FROM post_likes WHERE post_id = p.id) as likes_count,
+            (SELECT COUNT(*) FROM post_comments WHERE post_id = p.id) as comments_count,
+            (CASE WHEN ? IS NOT NULL AND EXISTS(SELECT 1 FROM post_likes WHERE post_id = p.id AND user_id = ?) THEN 1 ELSE 0 END) as liked_by_me,
+            r.title as recipe_title, r.category as recipe_category, r.prep_time as recipe_prep_time,
+            r.cook_time as recipe_cook_time, r.difficulty as recipe_difficulty, r.servings as recipe_servings,
+            r.share_token as recipe_share_token
+        FROM community_posts p
+        JOIN users u ON p.user_id = u.id
+        LEFT JOIN recipes r ON p.recipe_id = r.id
+        ORDER BY p.created_at DESC
+        LIMIT ? OFFSET ?
+    '''
+    rows = conn.execute(query, (current_user_id, current_user_id, limit, offset)).fetchall()
+    conn.close()
+
+    posts = []
+    for row in rows:
+        recipe_data = None
+        if row['recipe_id'] and row['recipe_title']:
+            recipe_data = {
+                'id': row['recipe_id'],
+                'title': row['recipe_title'],
+                'category': row['recipe_category'] or 'General',
+                'prep_time': row['recipe_prep_time'] or '',
+                'cook_time': row['recipe_cook_time'] or '',
+                'difficulty': row['recipe_difficulty'] or 'Easy',
+                'servings': row['recipe_servings'] or '',
+                'share_token': row['recipe_share_token'] or ''
+            }
+
+        posts.append({
+            'id': row['id'],
+            'content': row['content'],
+            'image_url': row['image_url'] or '',
+            'created_at': row['created_at'],
+            'author': {
+                'id': row['user_id'],
+                'username': row['author_username'],
+                'display_name': row['author_display_name'] or row['author_username']
+            },
+            'likes_count': row['likes_count'],
+            'comments_count': row['comments_count'],
+            'liked_by_me': bool(row['liked_by_me']),
+            'recipe': recipe_data,
+            'is_mine': (current_user_id is not None and row['user_id'] == current_user_id)
+        })
+
+    return jsonify(posts), 200
+
+@app.route('/api/community/posts', methods=['POST'])
+@login_required
+def create_community_post():
+    user_id = request.current_user['id']
+    data = request.get_json() or {}
+    content = data.get('content', '').strip()
+    image_url = data.get('image_url', '').strip()
+    recipe_id = data.get('recipe_id')
+
+    if not content:
+        return jsonify({'error': 'Post content cannot be empty'}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    if recipe_id:
+        recipe = cursor.execute('SELECT id, share_token FROM recipes WHERE id = ?', (recipe_id,)).fetchone()
+        if not recipe:
+            conn.close()
+            return jsonify({'error': 'Selected recipe not found'}), 404
+        # Ensure recipe has a share_token so viewers can 1-click clone it
+        if not recipe['share_token']:
+            share_token = secrets.token_urlsafe(16)
+            cursor.execute('UPDATE recipes SET share_token = ? WHERE id = ?', (share_token, recipe_id))
+
+    cursor.execute(
+        'INSERT INTO community_posts (user_id, content, image_url, recipe_id) VALUES (?, ?, ?, ?)',
+        (user_id, content, image_url, recipe_id)
+    )
+    post_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+
+    return jsonify({'message': 'Post created successfully!', 'post_id': post_id}), 201
+
+@app.route('/api/community/posts/<int:post_id>', methods=['DELETE'])
+@login_required
+def delete_community_post(post_id):
+    user_id = request.current_user['id']
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    post = cursor.execute('SELECT * FROM community_posts WHERE id = ? AND user_id = ?', (post_id, user_id)).fetchone()
+    if not post:
+        conn.close()
+        return jsonify({'error': 'Post not found or unauthorized to delete'}), 404
+
+    cursor.execute('DELETE FROM community_posts WHERE id = ?', (post_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({'message': 'Post deleted successfully'}), 200
+
+@app.route('/api/community/posts/<int:post_id>/like', methods=['POST'])
+@login_required
+def toggle_post_like(post_id):
+    user_id = request.current_user['id']
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    post = cursor.execute('SELECT id FROM community_posts WHERE id = ?', (post_id,)).fetchone()
+    if not post:
+        conn.close()
+        return jsonify({'error': 'Post not found'}), 404
+
+    existing_like = cursor.execute('SELECT 1 FROM post_likes WHERE post_id = ? AND user_id = ?', (post_id, user_id)).fetchone()
+    if existing_like:
+        cursor.execute('DELETE FROM post_likes WHERE post_id = ? AND user_id = ?', (post_id, user_id))
+        liked = False
+    else:
+        cursor.execute('INSERT INTO post_likes (post_id, user_id) VALUES (?, ?)', (post_id, user_id))
+        liked = True
+
+    conn.commit()
+    likes_count = cursor.execute('SELECT COUNT(*) FROM post_likes WHERE post_id = ?', (post_id,)).fetchone()[0]
+    conn.close()
+
+    return jsonify({'liked': liked, 'likes_count': likes_count}), 200
+
+@app.route('/api/community/posts/<int:post_id>/comments', methods=['GET'])
+def get_post_comments(post_id):
+    user = get_authenticated_user()
+    current_user_id = user['id'] if user else None
+
+    conn = get_db_connection()
+    rows = conn.execute('''
+        SELECT c.id, c.post_id, c.user_id, c.comment, c.created_at,
+               u.username as author_username, u.display_name as author_display_name
+        FROM post_comments c
+        JOIN users u ON c.user_id = u.id
+        WHERE c.post_id = ?
+        ORDER BY c.created_at ASC
+    ''', (post_id,)).fetchall()
+    conn.close()
+
+    comments = []
+    for r in rows:
+        comments.append({
+            'id': r['id'],
+            'post_id': r['post_id'],
+            'comment': r['comment'],
+            'created_at': r['created_at'],
+            'author': {
+                'id': r['user_id'],
+                'username': r['author_username'],
+                'display_name': r['author_display_name'] or r['author_username']
+            },
+            'is_mine': (current_user_id is not None and r['user_id'] == current_user_id)
+        })
+
+    return jsonify(comments), 200
+
+@app.route('/api/community/posts/<int:post_id>/comments', methods=['POST'])
+@login_required
+def add_post_comment(post_id):
+    user_id = request.current_user['id']
+    data = request.get_json() or {}
+    comment_text = data.get('comment', '').strip()
+
+    if not comment_text:
+        return jsonify({'error': 'Comment cannot be empty'}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    post = cursor.execute('SELECT id FROM community_posts WHERE id = ?', (post_id,)).fetchone()
+    if not post:
+        conn.close()
+        return jsonify({'error': 'Post not found'}), 404
+
+    cursor.execute(
+        'INSERT INTO post_comments (post_id, user_id, comment) VALUES (?, ?, ?)',
+        (post_id, user_id, comment_text)
+    )
+    comment_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+
+    return jsonify({
+        'message': 'Comment added successfully',
+        'comment': {
+            'id': comment_id,
+            'post_id': post_id,
+            'comment': comment_text,
+            'created_at': datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
+            'author': {
+                'id': user_id,
+                'username': request.current_user['username'],
+                'display_name': request.current_user['display_name']
+            },
+            'is_mine': True
+        }
+    }), 201
+
+@app.route('/api/community/comments/<int:comment_id>', methods=['DELETE'])
+@login_required
+def delete_post_comment(comment_id):
+    user_id = request.current_user['id']
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    comment = cursor.execute('SELECT * FROM post_comments WHERE id = ? AND user_id = ?', (comment_id, user_id)).fetchone()
+    if not comment:
+        conn.close()
+        return jsonify({'error': 'Comment not found or unauthorized to delete'}), 404
+
+    cursor.execute('DELETE FROM post_comments WHERE id = ?', (comment_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({'message': 'Comment deleted successfully'}), 200
 
 # --- Planner Endpoints ---
 

@@ -689,6 +689,7 @@
                 <li><a href="index.html" class="active">Home</a></li>
                 <li><a href="recipes.html">My Recipes</a></li>
                 <li><a href="planner.html">Planner</a></li>
+                <li><a href="feed.html">Community Feed</a></li>
             </ul>
         </nav>
     </header>
@@ -754,6 +755,17 @@
                 </div>
             </section>
         </div>
+
+        <!-- Community Spotlight Widget -->
+        <section class="section-box" style="margin-bottom: 30px;">
+            <h2>
+                <span>🍲 Community Kitchen Spotlight</span>
+                <a href="feed.html" style="font-size:0.7em; color:var(--primary-pink); text-decoration:none; font-family:'Open Sans'; font-weight:600;">Explore Community Feed &rarr;</a>
+            </h2>
+            <div id="communitySpotlightContainer" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px;">
+                <p style="padding:10px; color:#888;">Loading community recipes &amp; posts...</p>
+            </div>
+        </section>
 
         <!-- Sticky Notes Board -->
         <section class="stickies-section">
@@ -1186,6 +1198,66 @@
                 loadTasksForDay();
             });
 
+            async function loadCommunitySpotlight() {
+                const container = document.getElementById('communitySpotlightContainer');
+                if (!container) return;
+                try {
+                    const res = await fetch('/api/community/posts?limit=3', { credentials: 'include' });
+                    if (!res.ok) throw new Error('Could not load community feed');
+                    const posts = await res.json();
+
+                    if (posts.length === 0) {
+                        container.innerHTML = `
+                            <div style="grid-column: 1/-1; padding: 15px; text-align: center; opacity: 0.8;">
+                                <p style="margin: 0 0 8px 0;">No community posts yet. Be the first to share!</p>
+                                <a href="feed.html" style="color: var(--primary-pink); font-weight: 600; text-decoration: none;">Create a Post in Community Feed &rarr;</a>
+                            </div>
+                        `;
+                        return;
+                    }
+
+                    container.innerHTML = '';
+                    posts.forEach(post => {
+                        const author = post.author.display_name || post.author.username;
+                        const card = document.createElement('div');
+                        card.style.cssText = 'background:var(--background-color); border:1px solid var(--border-color); border-radius:12px; padding:14px; display:flex; flex-direction:column; justify-content:space-between; box-shadow:0 2px 6px rgba(0,0,0,0.04);';
+
+                        let recipeSnippet = '';
+                        if (post.recipe) {
+                            recipeSnippet = `
+                                <div style="background:var(--light-pink); border-radius:8px; padding:8px 10px; margin:8px 0; font-size:0.85em;">
+                                    <strong>🍽️ ${escapeHtml(post.recipe.title)}</strong>
+                                    <span style="opacity:0.8;">(${escapeHtml(post.recipe.category)})</span>
+                                </div>
+                            `;
+                        }
+
+                        let imgSnippet = '';
+                        if (post.image_url) {
+                            imgSnippet = `<img src="${escapeHtml(post.image_url)}" alt="dish" style="width:100%; height:120px; object-fit:cover; border-radius:8px; margin-bottom:8px;" onerror="this.style.display='none'">`;
+                        }
+
+                        card.innerHTML = `
+                            <div>
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; font-size:0.82em; opacity:0.75;">
+                                    <span style="font-weight:700; color:var(--primary-pink);">${escapeHtml(author)}</span>
+                                    <span>${post.liked_by_me ? '❤️' : '🤍'} ${post.likes_count}</span>
+                                </div>
+                                ${imgSnippet}
+                                <p style="margin:0 0 6px 0; font-size:0.9em; line-height:1.4; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;">${escapeHtml(post.content)}</p>
+                                ${recipeSnippet}
+                            </div>
+                            <div style="margin-top:8px; text-align:right;">
+                                <a href="feed.html" style="font-size:0.82em; color:var(--primary-pink); text-decoration:none; font-weight:700;">View in Feed &rarr;</a>
+                            </div>
+                        `;
+                        container.appendChild(card);
+                    });
+                } catch (err) {
+                    container.innerHTML = '<p style="grid-column: 1/-1; padding: 10px; opacity: 0.7;">Unable to load community posts.</p>';
+                }
+            }
+
             function escapeHtml(str) {
                 if (!str) return '';
                 return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -1203,6 +1275,7 @@
                 loadTasksForDay();
                 loadGroceries();
                 loadStickies();
+                loadCommunitySpotlight();
             });
         });
     </script>
