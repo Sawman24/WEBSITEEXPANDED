@@ -828,9 +828,14 @@
         createBackupModal();
 
         // Check if header exists and add theme & backup buttons if not present
+        const isLoginPage = window.location.pathname.endsWith('login.html');
         const themeSwitchWrappers = document.querySelectorAll('.theme-switch-wrapper');
         themeSwitchWrappers.forEach(wrapper => {
-            if (!wrapper.querySelector('.theme-btn-backup')) {
+            const existingCustomizers = Array.from(wrapper.querySelectorAll('.theme-btn-customizer'));
+            const hasBackupBtn = wrapper.querySelector('.theme-btn-backup') || existingCustomizers.some(b => b.textContent.includes('Backup'));
+            const hasThemeBtn = wrapper.querySelector('.theme-btn-theme') || existingCustomizers.some(b => b.textContent.includes('Theme'));
+
+            if (!hasBackupBtn && !isLoginPage) {
                 const backupBtn = document.createElement('button');
                 backupBtn.className = 'theme-btn-customizer theme-btn-backup';
                 backupBtn.type = 'button';
@@ -841,7 +846,7 @@
                 });
                 wrapper.insertBefore(backupBtn, wrapper.firstChild);
             }
-            if (!wrapper.querySelector('.theme-btn-theme')) {
+            if (!hasThemeBtn) {
                 const themeBtn = document.createElement('button');
                 themeBtn.className = 'theme-btn-customizer theme-btn-theme';
                 themeBtn.type = 'button';
