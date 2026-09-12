@@ -1,35 +1,39 @@
 #!/usr/bin/env python3
 """
-Community Food Feed & Social Recipe Simulation and Test Tool
--------------------------------------------------------------
-Simulates multi-user community activity:
-- User registration & authentications
-- Recipe creation with rich metadata
-- Community food posts with attached recipe cards & food photos
-- Real-time likes & social interactions
-- Multi-user comment threads
-- 1-Click recipe cloning into personal recipe boxes
-- Standalone public recipe share links
-- Password reset token verification
+Intensive Multi-User Social Feed & High-Scale Load Benchmark Tool
+-----------------------------------------------------------------
+Simulates realistic, concurrent multi-user activity across the entire platform:
+- Parallel account registration and secure session management
+- Multi-recipe creation across categories
+- Public recipe sharing & token generation
+- Community Food Feed posting with attached recipe cards & food photos
+- Feed browsing & social engagement (likes, multi-threaded comments)
+- 1-Click recipe cloning / forking into personal boxes
+- Meal planning & grocery list consolidation
+- High-throughput concurrency stress testing
 
-Usage:
-  python3 test_feed.py --url http://192.168.0.225:5052
-  python3 test_feed.py --url http://localhost:5000 --users 10
+Usage Examples:
+  # Run intensive 300-user community scale test against remote server:
+  python3 test_feed.py --url http://192.168.0.225:5052 --users 300
+
+  # Custom concurrency:
+  python3 test_feed.py --url http://192.168.0.225:5052 --users 300 --concurrency 50
 """
 
 import argparse
 import random
 import string
 import time
-import requests
+import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import requests
 
 RECIPES_DATABASE = [
     {
         "title": "Creamy Tuscan Garlic Gnocchi",
         "category": "Pasta",
         "ingredients": "1 lb potato gnocchi\n2 cups fresh baby spinach\n1 cup heavy cream\n1/2 cup sun-dried tomatoes, sliced\n3 cloves garlic, minced\n1/2 cup grated parmesan\n1 tbsp olive oil\nSalt and black pepper to taste",
-        "instructions": "1. Pan-sear gnocchi in olive oil until golden and crispy (approx 5 mins).\n2. Sauté garlic and sun-dried tomatoes until fragrant.\n3. Pour in heavy cream and bring to a gentle simmer.\n4. Stir in fresh baby spinach and parmesan until melted into a velvety sauce.\n5. Toss with gnocchi and serve immediately!",
+        "instructions": "1. Pan-sear gnocchi in olive oil until golden and crispy (5 mins).\n2. Sauté garlic and sun-dried tomatoes until fragrant.\n3. Pour in heavy cream and bring to a gentle simmer.\n4. Stir in fresh baby spinach and parmesan until melted into a velvety sauce.\n5. Toss with gnocchi and serve immediately!",
         "prep_time": "10 mins",
         "cook_time": "15 mins",
         "difficulty": "Easy",
@@ -53,7 +57,7 @@ RECIPES_DATABASE = [
         "title": "Smoked Paprika & Honey Glazed Salmon",
         "category": "Mains & Entrees",
         "ingredients": "4 salmon fillets (6 oz each)\n2 tbsp honey\n1 tbsp smoked paprika\n1 tbsp olive oil\n1 tbsp soy sauce\n1 clove garlic, finely grated\n1/2 lemon, juiced\nPinch of red pepper flakes",
-        "instructions": "1. Whisk honey, smoked paprika, olive oil, soy sauce, garlic, and lemon juice in a small bowl.\n2. Pat salmon fillets dry and brush generously with glaze on all sides.\n3. Heat a cast-iron skillet over medium-high heat with a dash of oil.\n4. Sear salmon skin-side down for 4 mins, flip, baste with remaining glaze, and cook 3-4 mins more.\n5. Garnish with chopped parsley and fresh lemon wedges.",
+        "instructions": "1. Whisk honey, smoked paprika, olive oil, soy sauce, garlic, and lemon juice.\n2. Pat salmon fillets dry and brush generously with glaze.\n3. Heat a cast-iron skillet over medium-high heat with olive oil.\n4. Sear salmon skin-side down for 4 mins, flip, baste with remaining glaze, and cook 3-4 mins.\n5. Garnish with chopped parsley and fresh lemon wedges.",
         "prep_time": "10 mins",
         "cook_time": "10 mins",
         "difficulty": "Easy",
@@ -70,235 +74,341 @@ RECIPES_DATABASE = [
         "cook_time": "14 mins",
         "difficulty": "Hard",
         "servings": "6",
-        "post_caption": "Japanese-inspired Strawberry Matcha Swiss Roll! The slight bitterness of the green tea balances the sweet whipped cream and tart strawberries perfectly. 🍓🍵🍰",
+        "post_caption": "Japanese-inspired Strawberry Matcha Swiss Roll! The slight bitterness of green tea balances the sweet whipped cream and tart strawberries perfectly. 🍓🍵🍰",
         "image_url": "https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=800&auto=format&fit=crop&q=80"
     },
     {
         "title": "Thai Coconut Curry Butternut Squash Soup",
         "category": "Soup",
         "ingredients": "1 large butternut squash, peeled and cubed\n1 can (14 oz) full-fat coconut milk\n2 tbsp Thai red curry paste\n1 medium onion, diced\n2 cloves garlic, minced\n1 tbsp grated fresh ginger\n3 cups vegetable broth\n1 tbsp lime juice\nToasted pumpkin seeds & cilantro for garnish",
-        "instructions": "1. Sauté onion, garlic, and ginger in olive oil until soft (3-4 mins).\n2. Stir in Thai red curry paste and cook for 1 minute until fragrant.\n3. Add cubed butternut squash and vegetable broth. Bring to a boil, then simmer 20 mins until fork tender.\n4. Blend with immersion blender until silky smooth.\n5. Stir in coconut milk and fresh lime juice. Ladle into bowls and top with toasted pumpkin seeds!",
+        "instructions": "1. Sauté onion, garlic, and ginger in olive oil until soft (3-4 mins).\n2. Stir in Thai red curry paste and cook for 1 minute until fragrant.\n3. Add cubed butternut squash and vegetable broth. Bring to a boil, then simmer 20 mins.\n4. Blend with immersion blender until silky smooth.\n5. Stir in coconut milk and fresh lime juice. Ladle into bowls and top with toasted pumpkin seeds!",
         "prep_time": "15 mins",
         "cook_time": "25 mins",
         "difficulty": "Easy",
         "servings": "6",
         "post_caption": "Super silky butternut squash soup with a fragrant Thai coconut curry kick! Perfect cozy bowl for chilly evenings. 🥣🥥🌶️",
         "image_url": "https://images.unsplash.com/photo-1547592166-23ac45744acd?w=800&auto=format&fit=crop&q=80"
+    },
+    {
+        "title": "Avocado & Crispy Prosciutto Egg Toast",
+        "category": "Breakfast",
+        "ingredients": "2 thick slices sourdough bread\n1 ripe avocado, mashed\n2 large eggs, poached or sunny side up\n2 slices prosciutto\n1 tbsp lemon juice\nRed pepper flakes, flaky salt & black pepper",
+        "instructions": "1. Toast sourdough bread until deep golden.\n2. Crisp prosciutto in a hot dry skillet for 2 minutes until crunchy.\n3. Mash avocado with lemon juice, salt, and pepper; spread thickly over toast.\n4. Top each slice with a fried egg and crumbled crispy prosciutto.\n5. Finish with extra red pepper flakes and microgreens!",
+        "prep_time": "5 mins",
+        "cook_time": "5 mins",
+        "difficulty": "Easy",
+        "servings": "2",
+        "post_caption": "Elevated weekend breakfast toast! That crispy prosciutto crunch on top of runny egg yolk and creamy avocado is unmatched. 🥑🍳🥓",
+        "image_url": "https://images.unsplash.com/photo-1525351484163-7529414344d8?w=800&auto=format&fit=crop&q=80"
+    },
+    {
+        "title": "Mediterranean Lemon Herb Orzo Salad",
+        "category": "Salad",
+        "ingredients": "2 cups cooked orzo pasta\n1 cup cherry tomatoes, halved\n1 English cucumber, diced\n1/2 cup Kalamata olives, pitted and sliced\n1/2 cup crumbled feta cheese\n1/4 cup red onion, finely diced\n1/4 cup extra virgin olive oil\n2 tbsp fresh lemon juice\n1 tbsp chopped fresh dill and oregano",
+        "instructions": "1. Cook orzo in salted water until al dente, drain and rinse with cold water.\n2. In a large bowl, whisk olive oil, lemon juice, chopped herbs, salt, and black pepper.\n3. Add cooled orzo, tomatoes, cucumber, olives, and red onion. Toss gently.\n4. Fold in crumbled feta cheese.\n5. Chill for 30 minutes before serving so flavors meld together beautifully.",
+        "prep_time": "15 mins",
+        "cook_time": "8 mins",
+        "difficulty": "Easy",
+        "servings": "6",
+        "post_caption": "Bright, zesty, and crunchy! This Mediterranean orzo salad is my go-to lunch meal prep for busy weeks. 🥗🍋🫒",
+        "image_url": "https://images.unsplash.com/photo-1540420773420-3366772f4999?w=800&auto=format&fit=crop&q=80"
+    },
+    {
+        "title": "Slow-Braised Red Wine Short Ribs",
+        "category": "Mains & Entrees",
+        "ingredients": "3 lbs bone-in beef short ribs\n1 bottle dry red wine (Cabernet or Pinot Noir)\n2 cups beef stock\n2 carrots, chopped\n2 stalks celery, chopped\n1 large yellow onion, diced\n4 cloves garlic, crushed\n2 tbsp tomato paste\nFresh thyme and rosemary sprigs",
+        "instructions": "1. Season short ribs generously with salt and pepper. Brown heavily in a Dutch oven on all sides.\n2. Remove ribs; sauté carrots, celery, onion, and garlic. Stir in tomato paste.\n3. Deglaze with red wine, scraping brown bits. Add beef stock, herbs, and return ribs.\n4. Cover and braise in oven at 325°F (165°C) for 3 to 3.5 hours until fall-apart tender.\n5. Skim fat, reduce sauce until rich, and serve over creamy mashed potatoes or polenta!",
+        "prep_time": "20 mins",
+        "cook_time": "210 mins",
+        "difficulty": "Medium",
+        "servings": "6",
+        "post_caption": "Slow-braised for 3.5 hours until meltingly tender. The red wine reduction over parmesan polenta was pure culinary heaven! 🍷🥩✨",
+        "image_url": "https://images.unsplash.com/photo-1544025162-d76694265947?w=800&auto=format&fit=crop&q=80"
     }
 ]
 
 COMMENTS_POOL = [
-    "This looks incredible! Definitely saving this to my box for dinner this week. 👏",
-    "Made this tonight and my family loved it! Thanks for sharing the recipe!",
-    "That golden crust looks perfection! Any tip on temperature adjustments for fan ovens?",
-    "Saved to my recipes! Can't wait to make it this weekend. 😋",
+    "This looks unbelievable! Definitely saving this to my box for dinner this week. 👏",
+    "Made this tonight and my family loved it! Thanks for sharing the recipe! 😋",
+    "That crust looks absolute perfection! Any tip on oven rack placement?",
+    "Saved to my recipes! Can't wait to make it this weekend. ⭐⭐⭐⭐⭐",
     "The plating and colors here are stunning! Great job chef! 🌟",
-    "10/10 recipe! I added a pinch of red chili flakes and it was sensational."
+    "10/10 recipe! I added a pinch of red chili flakes and it was sensational. 🔥",
+    "Bookmarked! Going right onto my meal planner for Tuesday dinner.",
+    "Such a creative twist! Did you use whole milk or almond milk?",
+    "Cooking this for date night tonight, wish me luck! 🥂",
+    "The photos made me instantly hungry. 1-click saved! 📥"
 ]
 
-def random_id(n=5):
+CHEF_FIRST_NAMES = [
+    "Michaela", "Marco", "Chloe", "Sam", "Elena", "Leo", "Rosa", "Oliver", 
+    "Maya", "Lucas", "Sophie", "Gabe", "Hannah", "Noah", "Bella", "Julian",
+    "Aria", "Mateo", "Zoe", "Arthur", "Camila", "Felix", "Ivy", "Theo"
+]
+
+def random_string(n=6):
     return ''.join(random.choices(string.ascii_lowercase + string.digits, k=n))
 
-class CommunityMember:
-    def __init__(self, base_url, index):
+class IntensiveVirtualUser:
+    def __init__(self, base_url, user_index):
         self.base_url = base_url.rstrip('/')
         self.session = requests.Session()
-        suffix = random_id(4)
-        names = ["Michaela", "Marco", "Chloe", "Sam", "Elena", "Chef_Leo", "Nonna_Rosa", "Oliver", "Maya", "Lucas"]
-        base_name = names[index % len(names)]
-        self.username = f"{base_name.lower()}_{suffix}"
-        self.display_name = f"{base_name.replace('_', ' ')} (Chef {suffix.upper()})"
-        self.email = f"{self.username}@foodie.community"
-        self.password = "KitchenSecrets2026!"
+        self.index = user_index
+        suffix = random_string(5)
+        first_name = CHEF_FIRST_NAMES[user_index % len(CHEF_FIRST_NAMES)]
+        self.username = f"{first_name.lower()}_{suffix}"
+        self.display_name = f"Chef {first_name} {suffix.upper()}"
+        self.email = f"{self.username}@virtualbox.benchmark"
+        self.password = "BenchmarkSecretPassword2026!"
         self.created_recipes = []
-        self.created_posts = []
 
-    def register(self):
-        r = self.session.post(f"{self.base_url}/api/auth/register", json={
-            "username": self.username,
-            "email": self.email,
-            "password": self.password,
-            "display_name": self.display_name
-        }, timeout=10)
-        return r.status_code == 201
+    def execute_intensive_journey(self):
+        latencies = []
+        errors = 0
 
-    def create_recipe(self, recipe_data):
-        r = self.session.post(f"{self.base_url}/api/recipes", json={
-            "title": recipe_data["title"],
-            "category": recipe_data["category"],
-            "ingredients": recipe_data["ingredients"],
-            "instructions": recipe_data["instructions"],
-            "prep_time": recipe_data.get("prep_time", ""),
-            "cook_time": recipe_data.get("cook_time", ""),
-            "difficulty": recipe_data.get("difficulty", "Easy"),
-            "servings": recipe_data.get("servings", "")
-        }, timeout=10)
-        if r.status_code == 201:
-            rec_id = r.json().get("id")
-            self.created_recipes.append((rec_id, recipe_data))
-            return rec_id
-        return None
+        # Helper for recording metrics
+        def track_req(action_name, func):
+            nonlocal errors
+            t0 = time.time()
+            try:
+                res, is_ok = func()
+                dur = time.time() - t0
+                latencies.append((action_name, dur, is_ok))
+                if not is_ok:
+                    errors += 1
+                return res
+            except Exception:
+                dur = time.time() - t0
+                latencies.append((action_name, dur, False))
+                errors += 1
+                return None
 
-    def post_to_feed(self, content, image_url="", recipe_id=None):
-        payload = {"content": content}
-        if image_url:
-            payload["image_url"] = image_url
-        if recipe_id:
-            payload["recipe_id"] = recipe_id
+        # 1. Register Account
+        def do_register():
+            r = self.session.post(f"{self.base_url}/api/auth/register", json={
+                "username": self.username,
+                "email": self.email,
+                "password": self.password,
+                "display_name": self.display_name
+            }, timeout=12)
+            return r, r.status_code == 201
+        track_req('1. Register User', do_register)
 
-        r = self.session.post(f"{self.base_url}/api/community/posts", json=payload, timeout=10)
-        if r.status_code == 201:
-            post_id = r.json().get("post_id")
-            self.created_posts.append(post_id)
-            return post_id
-        return None
+        # 2. Create 2 Distinct Handcrafted Recipes
+        recipes_to_create = random.sample(RECIPES_DATABASE, 2)
+        created_recipe_ids = []
+        for rec in recipes_to_create:
+            def do_add_rec(r_data=rec):
+                r = self.session.post(f"{self.base_url}/api/recipes", json={
+                    "title": f"{r_data['title']} (by {self.display_name})",
+                    "category": r_data["category"],
+                    "ingredients": r_data["ingredients"],
+                    "instructions": r_data["instructions"],
+                    "prep_time": r_data.get("prep_time", ""),
+                    "cook_time": r_data.get("cook_time", ""),
+                    "difficulty": r_data.get("difficulty", "Easy"),
+                    "servings": r_data.get("servings", "")
+                }, timeout=12)
+                if r.status_code == 201:
+                    r_id = r.json().get("id")
+                    created_recipe_ids.append((r_id, r_data))
+                    return r, True
+                return r, False
+            track_req('2. Create Recipe', do_add_rec)
 
-    def like_post(self, post_id):
-        r = self.session.post(f"{self.base_url}/api/community/posts/{post_id}/like", timeout=10)
-        return r.status_code == 200, r.json() if r.status_code == 200 else {}
+        # 3. Generate Public Share Tokens
+        for r_id, _ in created_recipe_ids:
+            def do_share(id_val=r_id):
+                r = self.session.post(f"{self.base_url}/api/recipes/{id_val}/share", timeout=12)
+                return r, r.status_code == 200
+            track_req('3. Share Recipe Token', do_share)
 
-    def add_comment(self, post_id, comment_text):
-        r = self.session.post(f"{self.base_url}/api/community/posts/{post_id}/comments", json={
-            "comment": comment_text
-        }, timeout=10)
-        return r.status_code == 201
+        # 4. Post to Community Food Feed with Attached Recipe Card
+        for r_id, r_data in created_recipe_ids:
+            def do_feed_post(id_val=r_id, data_val=r_data):
+                r = self.session.post(f"{self.base_url}/api/community/posts", json={
+                    "content": f"{data_val['post_caption']} ~ Made with love by @{self.username}!",
+                    "image_url": data_val["image_url"],
+                    "recipe_id": id_val
+                }, timeout=12)
+                return r, r.status_code == 201
+            track_req('4. Post to Feed', do_feed_post)
 
-    def clone_recipe(self, share_token):
-        r = self.session.post(f"{self.base_url}/api/recipes/clone/{share_token}", timeout=10)
-        return r.status_code == 201, r.json() if r.status_code == 201 else {}
+        # 5. Fetch Community Feed
+        feed_posts = []
+        def do_get_feed():
+            nonlocal feed_posts
+            r = self.session.get(f"{self.base_url}/api/community/posts?limit=50", timeout=12)
+            if r.status_code == 200:
+                feed_posts = r.json()
+                return r, True
+            return r, False
+        track_req('5. Browse Feed Stream', do_get_feed)
 
-    def fetch_feed(self):
-        r = self.session.get(f"{self.base_url}/api/community/posts", timeout=10)
-        if r.status_code == 200:
-            return r.json()
-        return []
+        # 6. Like Community Posts
+        if feed_posts:
+            sample_posts = random.sample(feed_posts, min(len(feed_posts), 3))
+            for p in sample_posts:
+                def do_like(p_id=p['id']):
+                    r = self.session.post(f"{self.base_url}/api/community/posts/{p_id}/like", timeout=12)
+                    return r, r.status_code == 200
+                track_req('6. Like Community Post', do_like)
 
-def run_simulation(base_url, num_users=5):
-    print("\n" + "=" * 65)
-    print("🥘 COMMUNITY FOOD FEED & SOCIAL RECIPE SIMULATOR")
-    print("=" * 65)
-    print(f"🎯 Target Server: {base_url}")
-    print(f"👥 Active Creators: {num_users} simulated community accounts\n")
-
-    start_time = time.time()
-    users = []
-
-    # 1. Register Accounts
-    print("1️⃣  Registering Community Foodies & Chefs...")
-    for i in range(num_users):
-        u = CommunityMember(base_url, i)
-        ok = u.register()
-        if ok:
-            users.append(u)
-            print(f"   👤 [{i+1}/{num_users}] Registered: {u.display_name} (@{u.username})")
-        else:
-            print(f"   ❌ Failed to register user {u.username}")
-
-    if not users:
-        print("\n❌ Could not connect or register users. Is the server running?")
-        return
-
-    # 2. Add Signature Recipes
-    print("\n2️⃣  Chefs adding signature handcrafted recipes...")
-    for i, u in enumerate(users):
-        rec_data = RECIPES_DATABASE[i % len(RECIPES_DATABASE)]
-        rec_id = u.create_recipe(rec_data)
-        if rec_id:
-            print(f"   📖 {u.display_name} added: \"{rec_data['title']}\" ({rec_data['category']})")
-
-    # 3. Post to Community Food Feed with Recipe Attachments & Photos
-    print("\n3️⃣  Publishing posts to Community Food Feed with linked recipes...")
-    all_post_ids = []
-    for i, u in enumerate(users):
-        if u.created_recipes:
-            rec_id, rec_data = u.created_recipes[0]
-            post_id = u.post_to_feed(
-                content=rec_data["post_caption"],
-                image_url=rec_data["image_url"],
-                recipe_id=rec_id
-            )
-            if post_id:
-                all_post_ids.append(post_id)
-                print(f"   🚀 Post #{post_id} published by @{u.username} with linked recipe \"{rec_data['title']}\"")
-
-    # 4. Community Browsing & Social Interactions (Likes & Comments)
-    print("\n4️⃣  Community members interacting (Liking posts & leaving comments)...")
-    feed_posts = users[0].fetch_feed()
-    for p in feed_posts:
-        p_id = p["id"]
-        # Other users like this post
-        for u in users:
-            if u.username != p["author"]["username"] and random.random() > 0.3:
-                liked_ok, like_res = u.like_post(p_id)
-                if liked_ok:
-                    print(f"   ❤️  @{u.username} liked post #{p_id} by @{p['author']['username']} (Total likes: {like_res.get('likes_count')})")
-
-        # Some users leave comments
-        commenting_users = [u for u in users if u.username != p["author"]["username"]]
-        if commenting_users:
-            commenter = random.choice(commenting_users)
+        # 7. Post Comments on Other Chefs' Recipes
+        if feed_posts:
+            target_post = random.choice(feed_posts)
             comment_text = random.choice(COMMENTS_POOL)
-            c_ok = commenter.add_comment(p_id, comment_text)
-            if c_ok:
-                print(f"   💬 @{commenter.username} commented on post #{p_id}: \"{comment_text[:45]}...\"")
+            def do_comment(p_id=target_post['id'], c_text=comment_text):
+                r = self.session.post(f"{self.base_url}/api/community/posts/{p_id}/comments", json={
+                    "comment": c_text
+                }, timeout=12)
+                return r, r.status_code == 201
+            track_req('7. Comment on Post', do_comment)
 
-    # 5. 1-Click Recipe Cloning from Feed
-    print("\n5️⃣  1-Click Forking: Users cloning shared recipes into their own boxes...")
-    updated_feed = users[0].fetch_feed()
-    for p in updated_feed:
-        if p.get("recipe") and p["recipe"].get("share_token"):
-            token = p["recipe"]["share_token"]
-            recipe_title = p["recipe"]["title"]
-            # A different user clones it
-            cloners = [u for u in users if u.username != p["author"]["username"]]
-            if cloners:
-                cloner = cloners[0]
-                clone_ok, clone_data = cloner.clone_recipe(token)
-                if clone_ok:
-                    print(f"   📥 @{cloner.username} 1-click cloned \"{recipe_title}\" into their personal box (New Recipe ID: {clone_data.get('recipe_id')})")
+        # 8. 1-Click Fork / Clone a Shared Recipe from the Feed
+        clonable_posts = [p for p in feed_posts if p.get('recipe') and p['recipe'].get('share_token')]
+        if clonable_posts:
+            target_clone = random.choice(clonable_posts)
+            share_tok = target_clone['recipe']['share_token']
+            def do_clone(token=share_tok):
+                r = self.session.post(f"{self.base_url}/api/recipes/clone/{token}", timeout=12)
+                return r, r.status_code == 201
+            track_req('8. 1-Click Clone Recipe', do_clone)
 
-    # 6. Verify Public Standalone Share URL
-    print("\n6️⃣  Testing Public Standalone Recipe Viewer Link (No login required)...")
-    if updated_feed and updated_feed[0].get("recipe"):
-        sample_token = updated_feed[0]["recipe"]["share_token"]
-        pub_res = requests.get(f"{base_url}/api/public/recipes/{sample_token}", timeout=10)
-        if pub_res.status_code == 200:
-            data = pub_res.json()
-            print(f"   ✅ Public Share Endpoint verified: \"{data['title']}\" by {data['author']['display_name']}")
-            print(f"   🔗 Share URL: {base_url}/share.html?token={sample_token}")
+        # 9. Meal Planner & Grocery Synchronization
+        def do_plan_meal():
+            r = self.session.post(f"{self.base_url}/api/planner/2026-09-18", json={
+                "meals": {
+                    "breakfast": "Avocado & Egg Sourdough",
+                    "lunch": "Mediterranean Orzo Salad",
+                    "dinner": "Tuscan Garlic Gnocchi"
+                },
+                "tasks": "Grocery run; Prep dinner ingredients",
+                "notes": "Community dinner party!"
+            }, timeout=12)
+            return r, r.status_code == 200
+        track_req('9. Sync Meal Planner', do_plan_meal)
 
-    # 7. Verify Password Reset Flow
-    print("\n7️⃣  Testing Password Reset Token Flow...")
-    test_user = users[0]
-    forgot_res = requests.post(f"{base_url}/api/auth/forgot-password", json={"email": test_user.email}, timeout=10)
-    if forgot_res.status_code == 200:
-        f_data = forgot_res.json()
-        print(f"   ✅ Password reset link requested for {test_user.email}")
-        if "dev_reset_token" in f_data:
-            token = f_data["dev_reset_token"]
-            reset_res = requests.post(f"{base_url}/api/auth/reset-password", json={
-                "token": token,
-                "new_password": "SuperSecretNewPassword2026!"
-            }, timeout=10)
-            if reset_res.status_code == 200:
-                print(f"   ✅ Password successfully reset via crypto token!")
+        def do_add_groceries():
+            r = self.session.post(f"{self.base_url}/api/groceries", json={
+                "item": "Potato Gnocchi\nHeavy Cream\nSpinach\nParmesan\nSourdough Bread\nAvocados\nSalmon Fillets"
+            }, timeout=12)
+            return r, r.status_code == 201
+        track_req('10. Add Groceries', do_add_groceries)
 
-    total_duration = time.time() - start_time
-    print("\n" + "=" * 65)
-    print("🎉 SIMULATION COMPLETE & VERIFIED 100% SUCCESS")
-    print("=" * 65)
-    print(f"⏱️  Total Duration:     {total_duration:.2f} seconds")
-    print(f"👥 Active Creators:    {len(users)}")
-    print(f"🍲 Feed Posts Created: {len(all_post_ids)}")
-    print(f"🌐 Community Feed:     {base_url}/feed.html")
-    print(f"🏠 Home Dashboard:     {base_url}/index.html")
-    print(f"📖 Recipe Box:         {base_url}/recipes.html")
-    print("=" * 65 + "\n")
+        # 10. Dashboard Read Multi-Query (Simulate Loading index.html)
+        def do_read_dashboard():
+            r1 = self.session.get(f"{self.base_url}/api/recipes", timeout=12)
+            r2 = self.session.get(f"{self.base_url}/api/planner", timeout=12)
+            r3 = self.session.get(f"{self.base_url}/api/groceries", timeout=12)
+            r4 = self.session.get(f"{self.base_url}/api/community/posts?limit=3", timeout=12)
+            ok = (r1.status_code == 200 and r2.status_code == 200 and r3.status_code == 200 and r4.status_code == 200)
+            return r4, ok
+        track_req('11. Full Dashboard Sync', do_read_dashboard)
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Test and simulate community food feed and recipe sharing")
+        return latencies, errors
+
+def print_progress(completed, total, start_time, total_requests):
+    elapsed = time.time() - start_time
+    rps = total_requests / elapsed if elapsed > 0 else 0
+    percent = (completed / total) * 100
+    bar_length = 30
+    filled = int(bar_length * completed // total)
+    bar = '█' * filled + '░' * (bar_length - filled)
+    sys.stdout.write(f"\r⚡ [{bar}] {completed}/{total} Users ({percent:.1f}%) | {total_requests} Reqs | {rps:.1f} RPS")
+    sys.stdout.flush()
+
+def main():
+    parser = argparse.ArgumentParser(description="Intensive Multi-User Social Feed Load & Stress Test")
     parser.add_argument("--url", default="http://localhost:5000", help="Base URL of the website")
-    parser.add_argument("--users", type=int, default=5, help="Number of virtual chefs/users to simulate")
+    parser.add_argument("--users", type=int, default=300, help="Number of concurrent virtual users to simulate (default: 300)")
+    parser.add_argument("--concurrency", type=int, default=50, help="Max parallel worker threads (default: 50)")
     args = parser.parse_args()
 
-    run_simulation(args.url, args.users)
+    print("\n" + "=" * 70)
+    print("🚀 INTENSIVE COMMUNITY FOOD FEED & MULTI-USER LOAD TEST")
+    print("=" * 70)
+    print(f"🎯 Target Server:       {args.url}")
+    print(f"👥 Virtual Users:       {args.users} concurrent simulated chefs/foodies")
+    print(f"🧵 Parallel Concurrency: {args.concurrency} worker threads")
+    print(f"🔄 Workflow:            Register → Add Recipes → Share Tokens → Post to Feed")
+    print(f"                        → Browse Stream → Like Posts → Comment → 1-Click Clone")
+    print(f"                        → Plan Meals → Add Groceries → Dashboard Sync")
+    print("=" * 70 + "\n")
+
+    start_time = time.time()
+    all_latencies = []
+    total_errors = 0
+    completed_users = 0
+
+    print(f"⏳ Executing heavy parallel traffic test across {args.users} accounts...\n")
+
+    with ThreadPoolExecutor(max_workers=min(args.concurrency, args.users)) as executor:
+        futures = [executor.submit(IntensiveVirtualUser(args.url, i).execute_intensive_journey) for i in range(args.users)]
+        for f in as_completed(futures):
+            user_latencies, errors = f.result()
+            all_latencies.extend(user_latencies)
+            total_errors += errors
+            completed_users += 1
+            print_progress(completed_users, args.users, start_time, len(all_latencies))
+
+    total_duration = time.time() - start_time
+    total_requests = len(all_latencies)
+    successful_requests = sum(1 for _, _, success in all_latencies if success)
+    rps = total_requests / total_duration if total_duration > 0 else 0
+
+    durations = [d * 1000 for _, d, success in all_latencies if success]
+    durations.sort()
+
+    p50 = durations[int(len(durations) * 0.50)] if durations else 0
+    p90 = durations[int(len(durations) * 0.90)] if durations else 0
+    p95 = durations[int(len(durations) * 0.95)] if durations else 0
+    p99 = durations[int(len(durations) * 0.99)] if durations else 0
+    min_lat = min(durations) if durations else 0
+    max_lat = max(durations) if durations else 0
+    avg_latency = sum(durations) / len(durations) if durations else 0
+
+    print("\n\n" + "=" * 70)
+    print("📊 COMPREHENSIVE PERFORMANCE & STABILITY REPORT")
+    print("=" * 70)
+    print(f"⏱️  Total Duration:         {total_duration:.2f} seconds")
+    print(f"📨 Total HTTP Requests:     {total_requests:,}")
+    print(f"✅ Successful Requests:     {successful_requests:,} ({successful_requests/total_requests*100:.1f}%)" if total_requests else "0")
+    print(f"❌ Failed Requests:         {total_errors}")
+    print(f"⚡ System Throughput:       {rps:.1f} requests/second")
+    print("-" * 70)
+    print(f"📈 Latency (p50 / median):   {p50:.1f} ms")
+    print(f"📈 Latency (p90):            {p90:.1f} ms")
+    print(f"🎯 Latency (p95):            {p95:.1f} ms")
+    print(f"🎯 Latency (p99):            {p99:.1f} ms")
+    print(f"📉 Latency (Min / Max):      {min_lat:.1f} ms / {max_lat:.1f} ms")
+    print(f"📊 Latency (Average):        {avg_latency:.1f} ms")
+    print("=" * 70)
+
+    # Action-by-Action Breakdown
+    action_types = {}
+    for action, dur, ok in all_latencies:
+        if action not in action_types:
+            action_types[action] = {"count": 0, "ok": 0, "durations": []}
+        action_types[action]["count"] += 1
+        if ok:
+            action_types[action]["ok"] += 1
+            action_types[action]["durations"].append(dur * 1000)
+
+    print("\n📋 ACTION-BY-ACTION LATENCY BREAKDOWN")
+    print("-" * 70)
+    print(f"{'Action Name':<26} | {'Count':<7} | {'Avg (ms)':<9} | {'p95 (ms)':<9} | {'Success':<8}")
+    print("-" * 70)
+    for act_name, stats in sorted(action_types.items()):
+        durs = sorted(stats["durations"])
+        avg_d = sum(durs) / len(durs) if durs else 0
+        p95_d = durs[int(len(durs) * 0.95)] if durs else 0
+        succ_rate = f"{(stats['ok']/stats['count'])*100:.0f}%" if stats['count'] else "0%"
+        print(f"{act_name:<26} | {stats['count']:<7} | {avg_d:<9.1f} | {p95_d:<9.1f} | {succ_rate:<8}")
+    print("=" * 70)
+    print(f"🌐 View Live Community Feed: {args.url}/feed.html")
+    print(f"🏠 View Home Dashboard:      {args.url}/index.html")
+    print("=" * 70 + "\n")
+
+if __name__ == "__main__":
+    main()
