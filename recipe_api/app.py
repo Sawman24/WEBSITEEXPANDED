@@ -2,20 +2,57 @@ import os
 import re
 import json
 import sqlite3
-from datetime import datetime
+import secrets
+import hashlib
+import hmac
+from datetime import datetime, timedelta, timezone
+from functools import wraps
 from fractions import Fraction
 import requests
 from bs4 import BeautifulSoup
 from flask import Flask, request, jsonify, make_response
 from flask_cors import CORS
 
+try:
+    from werkzeug.security import generate_password_hash, check_password_hash
+except ImportError:
+    def generate_password_hash(password, method='scrypt'):
+        salt = secrets.token_hex(16)
+        h = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), 100000).hex()
+        return f"pbkdf2:sha256:{salt}:{h}"
+
+    def check_password_hash(p_hash, password):
+        try:
+            parts = p_hash.split(':')
+            if len(parts) == 4 and parts[0] == 'pbkdf2':
+                salt = parts[2]
+                expected_h = parts[3]
+                actual_h = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), 100000).hex()
+                return hmac.compare_digest(expected_h, actual_h)
+            return False
+        except Exception:
+            return False
+
+def verify_password(password, p_hash):
+    try:
+        return check_password_hash(p_hash, password)
+    except Exception:
+        return False
+
+
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
+# Enable CORS with credentials support for session cookies
+CORS(app, supports_credentials=True)
 
 DATABASE = os.environ.get('DATABASE_PATH', os.path.join(os.path.abspath(os.path.dirname(__file__)), 'recipes.db'))
+SESSION_COOKIE_NAME = 'recipe_session_token'
+SESSION_DURATION_DAYS = 30
 
 def get_db_connection():
-    conn = sqlite3.connect(DATABASE)
+    conn = sqlite3.connect(DATABASE, timeout=30.0)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("PRAGMA foreign_keys=ON")
     conn.row_factory = sqlite3.Row  # Access columns by name
     return conn
 
@@ -31,9 +68,50 @@ def init_db():
 
     conn = get_db_connection()
     cursor = conn.cursor()
+
+    # Users Table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL COLLATE NOCASE,
+            email TEXT UNIQUE NOT NULL COLLATE NOCASE,
+            password_hash TEXT NOT NULL,
+            display_name TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            is_active INTEGER DEFAULT 1
+        )
+    ''')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)')
+
+    # Sessions Table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS sessions (
+            token TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            expires_at TIMESTAMP NOT NULL,
+            user_agent TEXT DEFAULT '',
+            ip_address TEXT DEFAULT ''
+        )
+    ''')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)')
+
+    # Rate Limiting / Brute Force Prevention Table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS login_attempts (
+            ip_address TEXT PRIMARY KEY,
+            attempts INTEGER DEFAULT 0,
+            last_attempt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            locked_until TIMESTAMP
+        )
+    ''')
+
+    # Recipes Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS recipes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER DEFAULT 1,
             title TEXT NOT NULL,
             ingredients TEXT NOT NULL,
             instructions TEXT NOT NULL,
@@ -45,42 +123,81 @@ def init_db():
             servings TEXT DEFAULT ''
         )
     ''')
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS planner (
-            date_key TEXT PRIMARY KEY,
-            breakfast TEXT DEFAULT 'Not planned',
-            lunch TEXT DEFAULT 'Not planned',
-            dinner TEXT DEFAULT 'Not planned',
-            tasks TEXT DEFAULT '',
-            notes TEXT DEFAULT ''
-        )
-    ''')
+
+    # Groceries Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS groceries (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER DEFAULT 1,
             item TEXT NOT NULL,
             checked INTEGER DEFAULT 0
         )
     ''')
+
+    # Stickies Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS stickies (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER DEFAULT 1,
             content TEXT NOT NULL,
             author TEXT DEFAULT 'Note',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+
+    # Pantry Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS pantry (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER DEFAULT 1,
             item TEXT NOT NULL,
             category TEXT DEFAULT 'General',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
 
-    # Auto-migrate columns if recipes table already exists without them
+    # Planner Table (Check schema and auto-migrate to multi-tenant user_id + date_key)
+    planner_cols = [col[1] for col in cursor.execute('PRAGMA table_info(planner)').fetchall()]
+    if not planner_cols:
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS planner (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL DEFAULT 1,
+                date_key TEXT NOT NULL,
+                breakfast TEXT DEFAULT 'Not planned',
+                lunch TEXT DEFAULT 'Not planned',
+                dinner TEXT DEFAULT 'Not planned',
+                tasks TEXT DEFAULT '',
+                notes TEXT DEFAULT '',
+                UNIQUE(user_id, date_key)
+            )
+        ''')
+    elif 'user_id' not in planner_cols:
+        # Migrate old single-user planner table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS planner_v2 (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL DEFAULT 1,
+                date_key TEXT NOT NULL,
+                breakfast TEXT DEFAULT 'Not planned',
+                lunch TEXT DEFAULT 'Not planned',
+                dinner TEXT DEFAULT 'Not planned',
+                tasks TEXT DEFAULT '',
+                notes TEXT DEFAULT '',
+                UNIQUE(user_id, date_key)
+            )
+        ''')
+        cursor.execute('''
+            INSERT OR IGNORE INTO planner_v2 (user_id, date_key, breakfast, lunch, dinner, tasks, notes)
+            SELECT 1, date_key, breakfast, lunch, dinner, tasks, notes FROM planner
+        ''')
+        cursor.execute('DROP TABLE planner')
+        cursor.execute('ALTER TABLE planner_v2 RENAME TO planner')
+
+    # Auto-migrate columns if tables already exist without user_id or recipe meta columns
     recipe_columns = [col[1] for col in cursor.execute('PRAGMA table_info(recipes)').fetchall()]
+    if 'user_id' not in recipe_columns:
+        cursor.execute("ALTER TABLE recipes ADD COLUMN user_id INTEGER DEFAULT 1")
     if 'category' not in recipe_columns:
         cursor.execute("ALTER TABLE recipes ADD COLUMN category TEXT DEFAULT 'General'")
     if 'is_favorite' not in recipe_columns:
@@ -94,12 +211,141 @@ def init_db():
     if 'servings' not in recipe_columns:
         cursor.execute("ALTER TABLE recipes ADD COLUMN servings TEXT DEFAULT ''")
 
+    grocery_columns = [col[1] for col in cursor.execute('PRAGMA table_info(groceries)').fetchall()]
+    if 'user_id' not in grocery_columns:
+        cursor.execute("ALTER TABLE groceries ADD COLUMN user_id INTEGER DEFAULT 1")
+
+    sticky_columns = [col[1] for col in cursor.execute('PRAGMA table_info(stickies)').fetchall()]
+    if 'user_id' not in sticky_columns:
+        cursor.execute("ALTER TABLE stickies ADD COLUMN user_id INTEGER DEFAULT 1")
+
+    pantry_columns = [col[1] for col in cursor.execute('PRAGMA table_info(pantry)').fetchall()]
+    if 'user_id' not in pantry_columns:
+        cursor.execute("ALTER TABLE pantry ADD COLUMN user_id INTEGER DEFAULT 1")
+
+    # Create Indexes for Multi-Tenant performance
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_recipes_user ON recipes(user_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_planner_user ON planner(user_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_planner_user_date ON planner(user_id, date_key)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_groceries_user ON groceries(user_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_stickies_user ON stickies(user_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_pantry_user ON pantry(user_id)')
+
     conn.commit()
     conn.close()
 
 # Initialize the database when the app starts
 with app.app_context():
     init_db()
+
+# --- Authentication Helpers & Middleware ---
+
+def create_user_session(user_id, ip_address='', user_agent=''):
+    token = secrets.token_urlsafe(32)
+    expires_at = (datetime.now(timezone.utc) + timedelta(days=SESSION_DURATION_DAYS)).strftime('%Y-%m-%d %H:%M:%S')
+    conn = get_db_connection()
+    conn.execute(
+        'INSERT INTO sessions (token, user_id, expires_at, user_agent, ip_address) VALUES (?, ?, ?, ?, ?)',
+        (token, user_id, expires_at, user_agent[:255] if user_agent else '', ip_address[:45] if ip_address else '')
+    )
+    conn.commit()
+    conn.close()
+    return token, expires_at
+
+def get_authenticated_user():
+    token = request.cookies.get(SESSION_COOKIE_NAME)
+    if not token:
+        auth_header = request.headers.get('Authorization', '')
+        if auth_header.startswith('Bearer '):
+            token = auth_header[7:].strip()
+    if not token:
+        return None
+
+    conn = get_db_connection()
+    now_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+    row = conn.execute('''
+        SELECT u.id, u.username, u.email, u.display_name, u.created_at, u.is_active
+        FROM sessions s
+        JOIN users u ON s.user_id = u.id
+        WHERE s.token = ? AND s.expires_at > ? AND u.is_active = 1
+    ''', (token, now_str)).fetchone()
+    conn.close()
+
+    if row:
+        return {
+            'id': row['id'],
+            'username': row['username'],
+            'email': row['email'],
+            'display_name': row['display_name'] or row['username'],
+            'created_at': row['created_at']
+        }
+    return None
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        user = get_authenticated_user()
+        if not user:
+            return jsonify({'error': 'Authentication required. Please log in.', 'code': 'UNAUTHORIZED'}), 401
+        request.current_user = user
+        return f(*args, **kwargs)
+    return decorated_function
+
+def check_login_rate_limit(ip_address):
+    conn = get_db_connection()
+    now = datetime.now(timezone.utc)
+    now_str = now.strftime('%Y-%m-%d %H:%M:%S')
+    row = conn.execute('SELECT * FROM login_attempts WHERE ip_address = ?', (ip_address,)).fetchone()
+    if row and row['locked_until'] and row['locked_until'] > now_str:
+        conn.close()
+        return False, "Too many failed login attempts. Please wait a few minutes."
+    conn.close()
+    return True, ""
+
+def record_login_attempt(ip_address, success):
+    conn = get_db_connection()
+    now = datetime.now(timezone.utc)
+    now_str = now.strftime('%Y-%m-%d %H:%M:%S')
+    if success:
+        conn.execute('DELETE FROM login_attempts WHERE ip_address = ?', (ip_address,))
+    else:
+        row = conn.execute('SELECT * FROM login_attempts WHERE ip_address = ?', (ip_address,)).fetchone()
+        if row:
+            new_attempts = row['attempts'] + 1
+            locked_until = (now + timedelta(minutes=5)).strftime('%Y-%m-%d %H:%M:%S') if new_attempts >= 5 else None
+            conn.execute('UPDATE login_attempts SET attempts = ?, last_attempt = ?, locked_until = ? WHERE ip_address = ?',
+                         (new_attempts, now_str, locked_until, ip_address))
+        else:
+            conn.execute('INSERT INTO login_attempts (ip_address, attempts, last_attempt) VALUES (?, 1, ?)',
+                         (ip_address, now_str))
+    conn.commit()
+    conn.close()
+
+def set_session_cookie(response, token, max_age_days=SESSION_DURATION_DAYS):
+    max_age = max_age_days * 86400
+    is_secure = request.is_secure or request.headers.get('X-Forwarded-Proto', '') == 'https'
+    response.set_cookie(
+        SESSION_COOKIE_NAME,
+        token,
+        max_age=max_age,
+        httponly=True,
+        samesite='Lax',
+        secure=is_secure,
+        path='/'
+    )
+    return response
+
+def clear_session_cookie(response):
+    response.set_cookie(
+        SESSION_COOKIE_NAME,
+        '',
+        max_age=0,
+        httponly=True,
+        samesite='Lax',
+        path='/'
+    )
+    return response
+
 
 # --- Helper: Smart Ingredient Parser & Consolidator ---
 
@@ -743,7 +989,167 @@ def extract_recipe_from_url(url, raw_content=None):
         'source_url': url
     }
 
+# --- Authentication Endpoints ---
+
+@app.route('/api/auth/register', methods=['POST'])
+def register():
+    data = request.get_json() or {}
+    username = data.get('username', '').strip()
+    email = data.get('email', '').strip().lower()
+    password = data.get('password', '')
+    display_name = data.get('display_name', '').strip() or username
+
+    if not username or len(username) < 3:
+        return jsonify({'error': 'Username must be at least 3 characters long.'}), 400
+    if not re.match(r'^[a-zA-Z0-9_.-]+$', username):
+        return jsonify({'error': 'Username can only contain letters, numbers, dots, hyphens, and underscores.'}), 400
+    if not email or '@' not in email or '.' not in email:
+        return jsonify({'error': 'Please provide a valid email address.'}), 400
+    if not password or len(password) < 8:
+        return jsonify({'error': 'Password must be at least 8 characters long.'}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    existing_user = cursor.execute('SELECT id FROM users WHERE LOWER(username) = ? OR LOWER(email) = ?', (username.lower(), email)).fetchone()
+    if existing_user:
+        conn.close()
+        return jsonify({'error': 'A user with that username or email already exists.'}), 409
+
+    pwd_hash = generate_password_hash(password)
+    cursor.execute(
+        'INSERT INTO users (username, email, password_hash, display_name) VALUES (?, ?, ?, ?)',
+        (username, email, pwd_hash, display_name)
+    )
+    user_id = cursor.lastrowid
+
+    # Check if this is the first registered user and claim existing legacy data
+    total_users = cursor.execute('SELECT COUNT(*) FROM users').fetchone()[0]
+    if total_users == 1:
+        cursor.execute('UPDATE recipes SET user_id = ? WHERE user_id = 1 OR user_id IS NULL', (user_id,))
+        cursor.execute('UPDATE planner SET user_id = ? WHERE user_id = 1 OR user_id IS NULL', (user_id,))
+        cursor.execute('UPDATE groceries SET user_id = ? WHERE user_id = 1 OR user_id IS NULL', (user_id,))
+        cursor.execute('UPDATE stickies SET user_id = ? WHERE user_id = 1 OR user_id IS NULL', (user_id,))
+        cursor.execute('UPDATE pantry SET user_id = ? WHERE user_id = 1 OR user_id IS NULL', (user_id,))
+
+    conn.commit()
+    conn.close()
+
+    # Create session
+    client_ip = request.headers.get('X-Real-IP', request.remote_addr or '')
+    user_agent = request.headers.get('User-Agent', '')
+    token, _ = create_user_session(user_id, client_ip, user_agent)
+
+    user_info = {
+        'id': user_id,
+        'username': username,
+        'email': email,
+        'display_name': display_name
+    }
+    resp = make_response(jsonify({'message': 'Registration successful', 'user': user_info}), 201)
+    return set_session_cookie(resp, token)
+
+@app.route('/api/auth/login', methods=['POST'])
+def login():
+    client_ip = request.headers.get('X-Real-IP', request.remote_addr or '')
+    allowed, rate_msg = check_login_rate_limit(client_ip)
+    if not allowed:
+        return jsonify({'error': rate_msg}), 429
+
+    data = request.get_json() or {}
+    username_or_email = data.get('username', '').strip()
+    password = data.get('password', '')
+
+    if not username_or_email or not password:
+        return jsonify({'error': 'Username/email and password are required.'}), 400
+
+    conn = get_db_connection()
+    user = conn.execute(
+        'SELECT * FROM users WHERE LOWER(username) = ? OR LOWER(email) = ?',
+        (username_or_email.lower(), username_or_email.lower())
+    ).fetchone()
+    conn.close()
+
+    if not user or not verify_password(password, user['password_hash']):
+        record_login_attempt(client_ip, success=False)
+        return jsonify({'error': 'Invalid username or password.'}), 401
+
+    if not user['is_active']:
+        return jsonify({'error': 'This account has been disabled.'}), 403
+
+    record_login_attempt(client_ip, success=True)
+
+    user_agent = request.headers.get('User-Agent', '')
+    token, _ = create_user_session(user['id'], client_ip, user_agent)
+
+    user_info = {
+        'id': user['id'],
+        'username': user['username'],
+        'email': user['email'],
+        'display_name': user['display_name'] or user['username']
+    }
+    resp = make_response(jsonify({'message': 'Login successful', 'user': user_info}), 200)
+    return set_session_cookie(resp, token)
+
+@app.route('/api/auth/logout', methods=['POST'])
+def logout():
+    token = request.cookies.get(SESSION_COOKIE_NAME)
+    if not token:
+        auth_header = request.headers.get('Authorization', '')
+        if auth_header.startswith('Bearer '):
+            token = auth_header[7:].strip()
+    if token:
+        conn = get_db_connection()
+        conn.execute('DELETE FROM sessions WHERE token = ?', (token,))
+        conn.commit()
+        conn.close()
+
+    resp = make_response(jsonify({'message': 'Logged out successfully'}), 200)
+    return clear_session_cookie(resp)
+
+@app.route('/api/auth/me', methods=['GET'])
+@login_required
+def get_current_user_profile():
+    return jsonify({'user': request.current_user}), 200
+
+@app.route('/api/auth/profile', methods=['PUT'])
+@login_required
+def update_user_profile():
+    user_id = request.current_user['id']
+    data = request.get_json() or {}
+    display_name = data.get('display_name')
+    current_password = data.get('current_password')
+    new_password = data.get('new_password')
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    user_row = cursor.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+
+    if not user_row:
+        conn.close()
+        return jsonify({'error': 'User not found'}), 404
+
+    if display_name is not None:
+        cursor.execute('UPDATE users SET display_name = ? WHERE id = ?', (display_name.strip(), user_id))
+
+    if new_password:
+        if not current_password or not verify_password(current_password, user_row['password_hash']):
+            conn.close()
+            return jsonify({'error': 'Current password is incorrect'}), 400
+        if len(new_password) < 8:
+            conn.close()
+            return jsonify({'error': 'New password must be at least 8 characters'}), 400
+        new_hash = generate_password_hash(new_password)
+        cursor.execute('UPDATE users SET password_hash = ? WHERE id = ?', (new_hash, user_id))
+
+    conn.commit()
+    conn.close()
+    return jsonify({'message': 'Profile updated successfully'}), 200
+
+# --- Recipe Endpoints ---
+
 @app.route('/api/recipes/import-url', methods=['POST'])
+@login_required
 def import_recipe_from_url():
     data = request.get_json()
     if not data or ('url' not in data and 'raw_text' not in data):
@@ -765,12 +1171,15 @@ def import_recipe_from_url():
     except Exception as e:
         return jsonify({'error': f'Failed to scrape recipe: {str(e)}'}), 500
 
-# --- Recipe Endpoints ---
-
 @app.route('/api/recipes', methods=['GET'])
+@login_required
 def get_recipes():
+    user_id = request.current_user['id']
     conn = get_db_connection()
-    recipes_db = conn.execute('SELECT * FROM recipes ORDER BY is_favorite DESC, id DESC').fetchall()
+    recipes_db = conn.execute(
+        'SELECT * FROM recipes WHERE user_id = ? ORDER BY is_favorite DESC, id DESC',
+        (user_id,)
+    ).fetchall()
     conn.close()
 
     recipes_list = []
@@ -791,9 +1200,11 @@ def get_recipes():
     return jsonify(recipes_list)
 
 @app.route('/api/recipes/<int:recipe_id>', methods=['GET'])
+@login_required
 def get_recipe(recipe_id):
+    user_id = request.current_user['id']
     conn = get_db_connection()
-    recipe = conn.execute('SELECT * FROM recipes WHERE id = ?', (recipe_id,)).fetchone()
+    recipe = conn.execute('SELECT * FROM recipes WHERE id = ? AND user_id = ?', (recipe_id, user_id)).fetchone()
     conn.close()
     if recipe:
         keys = recipe.keys()
@@ -812,7 +1223,9 @@ def get_recipe(recipe_id):
     return jsonify({'error': 'Recipe not found'}), 404
 
 @app.route('/api/recipes', methods=['POST'])
+@login_required
 def add_recipe():
+    user_id = request.current_user['id']
     data = request.get_json()
     if not data or not all(k in data for k in ('title', 'ingredients', 'instructions')):
         return jsonify({'error': 'Missing data. Required: title, ingredients, instructions'}), 400
@@ -831,8 +1244,9 @@ def add_recipe():
     cursor = conn.cursor()
     try:
         cursor.execute(
-            "INSERT INTO recipes (title, ingredients, instructions, category, is_favorite, prep_time, cook_time, difficulty, servings) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (title, ingredients, instructions, category, is_favorite, prep_time, cook_time, difficulty, servings)
+            """INSERT INTO recipes (user_id, title, ingredients, instructions, category, is_favorite, prep_time, cook_time, difficulty, servings)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (user_id, title, ingredients, instructions, category, is_favorite, prep_time, cook_time, difficulty, servings)
         )
         conn.commit()
         new_recipe_id = cursor.lastrowid
@@ -844,7 +1258,9 @@ def add_recipe():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/recipes/<int:recipe_id>', methods=['PUT'])
+@login_required
 def update_recipe(recipe_id):
+    user_id = request.current_user['id']
     data = request.get_json()
     if not data:
         return jsonify({'error': 'No data provided'}), 400
@@ -886,8 +1302,8 @@ def update_recipe(recipe_id):
         conn.close()
         return jsonify({'error': 'No fields to update'}), 400
 
-    params.append(recipe_id)
-    query = f"UPDATE recipes SET {', '.join(updates)} WHERE id = ?"
+    params.extend([recipe_id, user_id])
+    query = f"UPDATE recipes SET {', '.join(updates)} WHERE id = ? AND user_id = ?"
 
     try:
         cursor.execute(query, tuple(params))
@@ -904,25 +1320,29 @@ def update_recipe(recipe_id):
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/recipes/<int:recipe_id>/toggle-favorite', methods=['POST'])
+@login_required
 def toggle_favorite(recipe_id):
+    user_id = request.current_user['id']
     conn = get_db_connection()
     cursor = conn.cursor()
-    row = conn.execute('SELECT is_favorite FROM recipes WHERE id = ?', (recipe_id,)).fetchone()
+    row = conn.execute('SELECT is_favorite FROM recipes WHERE id = ? AND user_id = ?', (recipe_id, user_id)).fetchone()
     if not row:
         conn.close()
         return jsonify({'error': 'Recipe not found'}), 404
     new_fav = 0 if row['is_favorite'] else 1
-    cursor.execute('UPDATE recipes SET is_favorite = ? WHERE id = ?', (new_fav, recipe_id))
+    cursor.execute('UPDATE recipes SET is_favorite = ? WHERE id = ? AND user_id = ?', (new_fav, recipe_id, user_id))
     conn.commit()
     conn.close()
     return jsonify({'message': 'Favorite status toggled', 'is_favorite': bool(new_fav)}), 200
 
 @app.route('/api/recipes/<int:recipe_id>', methods=['DELETE'])
+@login_required
 def delete_recipe(recipe_id):
+    user_id = request.current_user['id']
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute("DELETE FROM recipes WHERE id = ?", (recipe_id,))
+        cursor.execute("DELETE FROM recipes WHERE id = ? AND user_id = ?", (recipe_id, user_id))
         conn.commit()
         rows_affected = cursor.rowcount
         conn.close()
@@ -938,9 +1358,11 @@ def delete_recipe(recipe_id):
 # --- Planner Endpoints ---
 
 @app.route('/api/planner', methods=['GET'])
+@login_required
 def get_planner():
+    user_id = request.current_user['id']
     conn = get_db_connection()
-    planner_db = conn.execute('SELECT * FROM planner').fetchall()
+    planner_db = conn.execute('SELECT * FROM planner WHERE user_id = ?', (user_id,)).fetchall()
     conn.close()
 
     planner_data = {}
@@ -957,9 +1379,11 @@ def get_planner():
     return jsonify(planner_data)
 
 @app.route('/api/planner/<string:date_key>', methods=['GET'])
+@login_required
 def get_planner_day(date_key):
+    user_id = request.current_user['id']
     conn = get_db_connection()
-    entry = conn.execute('SELECT * FROM planner WHERE date_key = ?', (date_key,)).fetchone()
+    entry = conn.execute('SELECT * FROM planner WHERE date_key = ? AND user_id = ?', (date_key, user_id)).fetchone()
     conn.close()
     if entry:
         return jsonify({
@@ -981,14 +1405,16 @@ def get_planner_day(date_key):
         })
 
 @app.route('/api/planner/<string:date_key>', methods=['POST'])
+@login_required
 def save_planner_day(date_key):
+    user_id = request.current_user['id']
     data = request.get_json()
     if not data:
         return jsonify({'error': 'No data provided'}), 400
 
     conn = get_db_connection()
     cursor = conn.cursor()
-    existing = conn.execute('SELECT * FROM planner WHERE date_key = ?', (date_key,)).fetchone()
+    existing = conn.execute('SELECT * FROM planner WHERE date_key = ? AND user_id = ?', (date_key, user_id)).fetchone()
 
     if existing:
         meals = data.get('meals', {})
@@ -1007,15 +1433,15 @@ def save_planner_day(date_key):
 
     try:
         cursor.execute('''
-            INSERT INTO planner (date_key, breakfast, lunch, dinner, tasks, notes)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(date_key) DO UPDATE SET
+            INSERT INTO planner (user_id, date_key, breakfast, lunch, dinner, tasks, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(user_id, date_key) DO UPDATE SET
                 breakfast = excluded.breakfast,
                 lunch = excluded.lunch,
                 dinner = excluded.dinner,
                 tasks = excluded.tasks,
                 notes = excluded.notes
-        ''', (date_key, breakfast, lunch, dinner, tasks, notes))
+        ''', (user_id, date_key, breakfast, lunch, dinner, tasks, notes))
         conn.commit()
         conn.close()
         return jsonify({'message': f'Planner updated for {date_key}'}), 200
@@ -1025,10 +1451,12 @@ def save_planner_day(date_key):
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/planner/<string:date_key>', methods=['DELETE'])
+@login_required
 def clear_planner_day(date_key):
+    user_id = request.current_user['id']
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM planner WHERE date_key = ?", (date_key,))
+    cursor.execute("DELETE FROM planner WHERE date_key = ? AND user_id = ?", (date_key, user_id))
     conn.commit()
     rows_affected = cursor.rowcount
     conn.close()
@@ -1040,14 +1468,18 @@ def clear_planner_day(date_key):
 # --- Grocery List Endpoints ---
 
 @app.route('/api/groceries', methods=['GET'])
+@login_required
 def get_groceries():
+    user_id = request.current_user['id']
     conn = get_db_connection()
-    items = conn.execute('SELECT * FROM groceries ORDER BY checked ASC, id DESC').fetchall()
+    items = conn.execute('SELECT * FROM groceries WHERE user_id = ? ORDER BY checked ASC, id DESC', (user_id,)).fetchall()
     conn.close()
     return jsonify([{'id': row['id'], 'item': row['item'], 'checked': bool(row['checked'])} for row in items])
 
 @app.route('/api/groceries', methods=['POST'])
+@login_required
 def add_grocery():
+    user_id = request.current_user['id']
     data = request.get_json()
     if not data or 'item' not in data:
         return jsonify({'error': 'Item text is required'}), 400
@@ -1068,19 +1500,21 @@ def add_grocery():
     conn = get_db_connection()
     cursor = conn.cursor()
     for item in items_list:
-        cursor.execute("INSERT INTO groceries (item, checked) VALUES (?, 0)", (item,))
+        cursor.execute("INSERT INTO groceries (user_id, item, checked) VALUES (?, ?, 0)", (user_id, item))
     conn.commit()
     conn.close()
     return jsonify({'message': f'Added {len(items_list)} items to groceries'}), 201
 
 @app.route('/api/groceries/consolidate', methods=['POST'])
+@login_required
 def consolidate_grocery_list():
     """
     Consolidates unchecked grocery items in the database by combining identical ingredients and quantities.
     """
+    user_id = request.current_user['id']
     conn = get_db_connection()
     cursor = conn.cursor()
-    unchecked_rows = conn.execute('SELECT id, item FROM groceries WHERE checked = 0').fetchall()
+    unchecked_rows = conn.execute('SELECT id, item FROM groceries WHERE checked = 0 AND user_id = ?', (user_id,)).fetchall()
 
     if not unchecked_rows:
         conn.close()
@@ -1090,9 +1524,9 @@ def consolidate_grocery_list():
     consolidated = consolidate_ingredients(raw_items)
 
     # Delete existing unchecked rows and re-insert consolidated ones
-    cursor.execute('DELETE FROM groceries WHERE checked = 0')
+    cursor.execute('DELETE FROM groceries WHERE checked = 0 AND user_id = ?', (user_id,))
     for item in consolidated:
-        cursor.execute('INSERT INTO groceries (item, checked) VALUES (?, 0)', (item,))
+        cursor.execute('INSERT INTO groceries (user_id, item, checked) VALUES (?, ?, 0)', (user_id, item))
 
     conn.commit()
     conn.close()
@@ -1102,33 +1536,43 @@ def consolidate_grocery_list():
     }), 200
 
 @app.route('/api/groceries/<int:item_id>/toggle', methods=['POST'])
+@login_required
 def toggle_grocery(item_id):
+    user_id = request.current_user['id']
     conn = get_db_connection()
     cursor = conn.cursor()
-    row = conn.execute('SELECT checked FROM groceries WHERE id = ?', (item_id,)).fetchone()
+    row = conn.execute('SELECT checked FROM groceries WHERE id = ? AND user_id = ?', (item_id, user_id)).fetchone()
     if not row:
         conn.close()
         return jsonify({'error': 'Item not found'}), 404
     new_status = 0 if row['checked'] else 1
-    cursor.execute("UPDATE groceries SET checked = ? WHERE id = ?", (new_status, item_id))
+    cursor.execute("UPDATE groceries SET checked = ? WHERE id = ? AND user_id = ?", (new_status, item_id, user_id))
     conn.commit()
     conn.close()
     return jsonify({'message': 'Grocery item updated', 'checked': bool(new_status)}), 200
 
 @app.route('/api/groceries/<int:item_id>', methods=['DELETE'])
+@login_required
 def delete_grocery(item_id):
+    user_id = request.current_user['id']
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM groceries WHERE id = ?", (item_id,))
+    cursor.execute("DELETE FROM groceries WHERE id = ? AND user_id = ?", (item_id, user_id))
     conn.commit()
+    rows_affected = cursor.rowcount
     conn.close()
-    return jsonify({'message': 'Grocery item deleted'}), 200
+    if rows_affected > 0:
+        return jsonify({'message': 'Grocery item deleted'}), 200
+    else:
+        return jsonify({'error': 'Item not found'}), 404
 
 @app.route('/api/groceries/clear-checked', methods=['POST'])
+@login_required
 def clear_checked_groceries():
+    user_id = request.current_user['id']
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM groceries WHERE checked = 1")
+    cursor.execute("DELETE FROM groceries WHERE checked = 1 AND user_id = ?", (user_id,))
     conn.commit()
     conn.close()
     return jsonify({'message': 'Cleared checked groceries'}), 200
@@ -1136,14 +1580,18 @@ def clear_checked_groceries():
 # --- Sticky Notes Endpoints ---
 
 @app.route('/api/stickies', methods=['GET'])
+@login_required
 def get_stickies():
+    user_id = request.current_user['id']
     conn = get_db_connection()
-    rows = conn.execute('SELECT * FROM stickies ORDER BY id DESC').fetchall()
+    rows = conn.execute('SELECT * FROM stickies WHERE user_id = ? ORDER BY id DESC', (user_id,)).fetchall()
     conn.close()
     return jsonify([{'id': r['id'], 'content': r['content'], 'author': r['author'], 'created_at': r['created_at']} for r in rows])
 
 @app.route('/api/stickies', methods=['POST'])
+@login_required
 def add_sticky():
+    user_id = request.current_user['id']
     data = request.get_json() or {}
     content = data.get('content', '').strip()
     author = data.get('author', '').strip() or 'Note'
@@ -1152,27 +1600,35 @@ def add_sticky():
 
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO stickies (content, author) VALUES (?, ?)", (content, author))
+    cursor.execute("INSERT INTO stickies (user_id, content, author) VALUES (?, ?, ?)", (user_id, content, author))
     conn.commit()
     new_id = cursor.lastrowid
     conn.close()
     return jsonify({'message': 'Sticky added', 'id': new_id}), 201
 
 @app.route('/api/stickies/<int:sticky_id>', methods=['DELETE'])
+@login_required
 def delete_sticky(sticky_id):
+    user_id = request.current_user['id']
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM stickies WHERE id = ?", (sticky_id,))
+    cursor.execute("DELETE FROM stickies WHERE id = ? AND user_id = ?", (sticky_id, user_id))
     conn.commit()
+    rows_affected = cursor.rowcount
     conn.close()
-    return jsonify({'message': 'Sticky deleted'}), 200
+    if rows_affected > 0:
+        return jsonify({'message': 'Sticky deleted'}), 200
+    else:
+        return jsonify({'error': 'Sticky not found'}), 404
 
 # --- Pantry & "What Can I Make?" Endpoints ---
 
 @app.route('/api/pantry', methods=['GET'])
+@login_required
 def get_pantry():
+    user_id = request.current_user['id']
     conn = get_db_connection()
-    items = conn.execute('SELECT * FROM pantry ORDER BY item ASC').fetchall()
+    items = conn.execute('SELECT * FROM pantry WHERE user_id = ? ORDER BY item ASC', (user_id,)).fetchall()
     conn.close()
     return jsonify([{
         'id': row['id'],
@@ -1181,7 +1637,9 @@ def get_pantry():
     } for row in items])
 
 @app.route('/api/pantry', methods=['POST'])
+@login_required
 def add_pantry_items():
+    user_id = request.current_user['id']
     data = request.get_json() or {}
     raw_input = data.get('item', '')
     category = data.get('category', 'General')
@@ -1201,10 +1659,10 @@ def add_pantry_items():
     cursor = conn.cursor()
     added_count = 0
     for item_text in lines:
-        # Avoid duplicate inserts
-        exists = cursor.execute('SELECT id FROM pantry WHERE LOWER(item) = ?', (item_text.lower(),)).fetchone()
+        # Avoid duplicate inserts for this user
+        exists = cursor.execute('SELECT id FROM pantry WHERE LOWER(item) = ? AND user_id = ?', (item_text.lower(), user_id)).fetchone()
         if not exists:
-            cursor.execute('INSERT INTO pantry (item, category) VALUES (?, ?)', (item_text, category))
+            cursor.execute('INSERT INTO pantry (user_id, item, category) VALUES (?, ?, ?)', (user_id, item_text, category))
             added_count += 1
 
     conn.commit()
@@ -1212,19 +1670,27 @@ def add_pantry_items():
     return jsonify({'message': f'Added {added_count} items to pantry'}), 201
 
 @app.route('/api/pantry/<int:item_id>', methods=['DELETE'])
+@login_required
 def delete_pantry_item(item_id):
+    user_id = request.current_user['id']
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute('DELETE FROM pantry WHERE id = ?', (item_id,))
+    cursor.execute('DELETE FROM pantry WHERE id = ? AND user_id = ?', (item_id, user_id))
     conn.commit()
+    rows_affected = cursor.rowcount
     conn.close()
-    return jsonify({'message': 'Pantry item deleted'}), 200
+    if rows_affected > 0:
+        return jsonify({'message': 'Pantry item deleted'}), 200
+    else:
+        return jsonify({'error': 'Item not found'}), 404
 
 @app.route('/api/pantry/clear', methods=['POST'])
+@login_required
 def clear_pantry():
+    user_id = request.current_user['id']
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute('DELETE FROM pantry')
+    cursor.execute('DELETE FROM pantry WHERE user_id = ?', (user_id,))
     conn.commit()
     conn.close()
     return jsonify({'message': 'Pantry cleared'}), 200
@@ -1232,18 +1698,21 @@ def clear_pantry():
 # --- Backup & Restore Endpoints ---
 
 @app.route('/api/backup', methods=['GET'])
+@login_required
 def get_backup():
+    user_id = request.current_user['id']
     conn = get_db_connection()
-    recipes_db = conn.execute('SELECT * FROM recipes').fetchall()
-    planner_db = conn.execute('SELECT * FROM planner').fetchall()
-    groceries_db = conn.execute('SELECT * FROM groceries').fetchall()
-    stickies_db = conn.execute('SELECT * FROM stickies').fetchall()
-    pantry_db = conn.execute('SELECT * FROM pantry').fetchall()
+    recipes_db = conn.execute('SELECT * FROM recipes WHERE user_id = ?', (user_id,)).fetchall()
+    planner_db = conn.execute('SELECT * FROM planner WHERE user_id = ?', (user_id,)).fetchall()
+    groceries_db = conn.execute('SELECT * FROM groceries WHERE user_id = ?', (user_id,)).fetchall()
+    stickies_db = conn.execute('SELECT * FROM stickies WHERE user_id = ?', (user_id,)).fetchall()
+    pantry_db = conn.execute('SELECT * FROM pantry WHERE user_id = ?', (user_id,)).fetchall()
     conn.close()
 
     backup_data = {
-        'version': '1.0',
-        'exported_at': datetime.utcnow().isoformat() + 'Z',
+        'version': '2.0',
+        'exported_at': datetime.now(timezone.utc).isoformat(),
+        'user': request.current_user['username'],
         'recipes': [dict(r) for r in recipes_db],
         'planner': [dict(p) for p in planner_db],
         'groceries': [dict(g) for g in groceries_db],
@@ -1253,7 +1722,9 @@ def get_backup():
     return jsonify(backup_data)
 
 @app.route('/api/restore', methods=['POST'])
+@login_required
 def restore_backup():
+    user_id = request.current_user['id']
     payload = request.get_json()
     if not payload:
         return jsonify({'error': 'Invalid backup JSON payload'}), 400
@@ -1266,11 +1737,11 @@ def restore_backup():
 
     try:
         if mode == 'replace':
-            cursor.execute('DELETE FROM recipes')
-            cursor.execute('DELETE FROM planner')
-            cursor.execute('DELETE FROM groceries')
-            cursor.execute('DELETE FROM stickies')
-            cursor.execute('DELETE FROM pantry')
+            cursor.execute('DELETE FROM recipes WHERE user_id = ?', (user_id,))
+            cursor.execute('DELETE FROM planner WHERE user_id = ?', (user_id,))
+            cursor.execute('DELETE FROM groceries WHERE user_id = ?', (user_id,))
+            cursor.execute('DELETE FROM stickies WHERE user_id = ?', (user_id,))
+            cursor.execute('DELETE FROM pantry WHERE user_id = ?', (user_id,))
 
         # Restore recipes
         recipes = data.get('recipes', [])
@@ -1279,13 +1750,14 @@ def restore_backup():
             if not title:
                 continue
             if mode == 'merge':
-                exists = cursor.execute('SELECT id FROM recipes WHERE LOWER(title) = ?', (title.lower(),)).fetchone()
+                exists = cursor.execute('SELECT id FROM recipes WHERE LOWER(title) = ? AND user_id = ?', (title.lower(), user_id)).fetchone()
                 if exists:
                     continue
             cursor.execute('''
-                INSERT INTO recipes (title, ingredients, instructions, category, is_favorite, prep_time, cook_time, difficulty, servings)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO recipes (user_id, title, ingredients, instructions, category, is_favorite, prep_time, cook_time, difficulty, servings)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
+                user_id,
                 title,
                 r.get('ingredients', ''),
                 r.get('instructions', ''),
@@ -1304,15 +1776,16 @@ def restore_backup():
             for date_key, p_data in planner.items():
                 meals = p_data.get('meals', {})
                 cursor.execute('''
-                    INSERT INTO planner (date_key, breakfast, lunch, dinner, tasks, notes)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(date_key) DO UPDATE SET
+                    INSERT INTO planner (user_id, date_key, breakfast, lunch, dinner, tasks, notes)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(user_id, date_key) DO UPDATE SET
                         breakfast = excluded.breakfast,
                         lunch = excluded.lunch,
                         dinner = excluded.dinner,
                         tasks = excluded.tasks,
                         notes = excluded.notes
                 ''', (
+                    user_id,
                     date_key,
                     meals.get('breakfast', 'Not planned'),
                     meals.get('lunch', 'Not planned'),
@@ -1326,15 +1799,16 @@ def restore_backup():
                 if not date_key:
                     continue
                 cursor.execute('''
-                    INSERT INTO planner (date_key, breakfast, lunch, dinner, tasks, notes)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(date_key) DO UPDATE SET
+                    INSERT INTO planner (user_id, date_key, breakfast, lunch, dinner, tasks, notes)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(user_id, date_key) DO UPDATE SET
                         breakfast = excluded.breakfast,
                         lunch = excluded.lunch,
                         dinner = excluded.dinner,
                         tasks = excluded.tasks,
                         notes = excluded.notes
                 ''', (
+                    user_id,
                     date_key,
                     p.get('breakfast', 'Not planned'),
                     p.get('lunch', 'Not planned'),
@@ -1350,10 +1824,10 @@ def restore_backup():
             if not item:
                 continue
             if mode == 'merge':
-                exists = cursor.execute('SELECT id FROM groceries WHERE LOWER(item) = ? AND checked = ?', (item.lower(), 1 if g.get('checked') else 0)).fetchone()
+                exists = cursor.execute('SELECT id FROM groceries WHERE LOWER(item) = ? AND checked = ? AND user_id = ?', (item.lower(), 1 if g.get('checked') else 0, user_id)).fetchone()
                 if exists:
                     continue
-            cursor.execute('INSERT INTO groceries (item, checked) VALUES (?, ?)', (item, 1 if g.get('checked') else 0))
+            cursor.execute('INSERT INTO groceries (user_id, item, checked) VALUES (?, ?, ?)', (user_id, item, 1 if g.get('checked') else 0))
 
         # Restore stickies
         stickies = data.get('stickies', [])
@@ -1361,7 +1835,7 @@ def restore_backup():
             content = s.get('content', '').strip()
             if not content:
                 continue
-            cursor.execute('INSERT INTO stickies (content, author) VALUES (?, ?)', (content, s.get('author', 'Note')))
+            cursor.execute('INSERT INTO stickies (user_id, content, author) VALUES (?, ?, ?)', (user_id, content, s.get('author', 'Note')))
 
         # Restore pantry
         pantry = data.get('pantry', [])
@@ -1370,10 +1844,10 @@ def restore_backup():
             if not item:
                 continue
             if mode == 'merge':
-                exists = cursor.execute('SELECT id FROM pantry WHERE LOWER(item) = ?', (item.lower(),)).fetchone()
+                exists = cursor.execute('SELECT id FROM pantry WHERE LOWER(item) = ? AND user_id = ?', (item.lower(), user_id)).fetchone()
                 if exists:
                     continue
-            cursor.execute('INSERT INTO pantry (item, category) VALUES (?, ?)', (item, pt.get('category', 'General')))
+            cursor.execute('INSERT INTO pantry (user_id, item, category) VALUES (?, ?, ?)', (user_id, item, pt.get('category', 'General')))
 
         conn.commit()
         conn.close()
@@ -1387,3 +1861,4 @@ def restore_backup():
 if __name__ == '__main__':
     # For development only. For production, use Gunicorn/Nginx.
     app.run(host='0.0.0.0', port=5000, debug=True)
+

@@ -6,6 +6,7 @@
     <title>My Daily Planner</title>
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
     <script src="theme.js"></script>
+    <script src="auth.js"></script>
     <style>
         :root {
             --primary-pink: #FF6B81;
@@ -925,7 +926,10 @@
                 renderCalendar();
             });
 
-            renderCalendar();
+            // Initial load with authentication check
+            window.Auth.requireAuth(() => {
+                renderCalendar();
+            });
         });
     </script>
 </body>

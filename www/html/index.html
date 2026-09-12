@@ -6,6 +6,7 @@
     <title>Virtual Recipe Box & Planner</title>
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&family=Playfair+Display:wght@700&family=Caveat:wght@600&display=swap" rel="stylesheet">
     <script src="theme.js"></script>
+    <script src="auth.js"></script>
     <style>
         :root {
             --primary-pink: #FF6B81;
@@ -1191,11 +1192,19 @@
                 return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
             }
 
-            // Init all sections
-            loadUpcomingMeals();
-            loadTasksForDay();
-            loadGroceries();
-            loadStickies();
+            // Require authenticated session before loading data
+            window.Auth.requireAuth((user) => {
+                const greetingEl = document.getElementById('greetingTitle');
+                if (greetingEl && user) {
+                    const displayName = user.display_name || user.username || 'Chef';
+                    greetingEl.innerHTML = `Good Day, ${escapeHtml(displayName)}! ✨`;
+                }
+                // Init all sections
+                loadUpcomingMeals();
+                loadTasksForDay();
+                loadGroceries();
+                loadStickies();
+            });
         });
     </script>
 </body>

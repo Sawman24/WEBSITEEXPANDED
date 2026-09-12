@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Log In &bull; Virtual Recipe Box & Planner</title>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&family=Playfair+Display:wght@700&family=Caveat:wght@600&display=swap" rel="stylesheet">
+    <script src="theme.js"></script>
+    <style>
+        :root {
+            --primary-pink: #FF6B81;
+            --light-pink: #FFE8EE;
+            --accent-pink: #F7CAC9;
+            --text-color: #333333;
+            --background-color: #FFFFFF;
+            --card-background: #FDFDFD;
+            --border-color: #E0E0E0;
+            --button-hover: #E85B70;
+            --floral-pattern: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" opacity="0.1"><circle cx="20" cy="20" r="5" fill="%23fcc" /><circle cx="80" cy="80" r="5" fill="%23fcc" /><circle cx="20" cy="80" r="5" fill="%23fcc" /><circle cx="80" cy="20" r="5" fill="%23fcc" /></svg>');
+        }
+
+        body.dark-mode {
+            --primary-pink: #FE9BA3;
+            --light-pink: #29517A;
+            --accent-pink: #5C4B5F;
+            --text-color: #F0F0F0;
+            --background-color: #172D44;
+            --card-background: #203F5F;
+            --border-color: #55445B;
+            --button-hover: #D04A5D;
+            --floral-pattern: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" opacity="0.05"><circle cx="20" cy="20" r="5" fill="%234A3C4D" /><circle cx="80" cy="80" r="5" fill="%234A3C4D" /><circle cx="20" cy="80" r="5" fill="%234A3C4D" /><circle cx="80" cy="20" r="5" fill="%234A3C4D" /></svg>');
+        }
+
+        body {
+            font-family: 'Open Sans', 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            background-image: var(--floral-pattern);
+            background-repeat: repeat;
+            background-size: 80px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            background-color: var(--primary-pink);
+            color: white;
+            padding: 1.2em 0;
+            text-align: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            position: relative;
+        }
+
+        header h1 {
+            color: white;
+            margin: 0;
+            font-family: 'Playfair Display', serif;
+            font-size: 1.8em;
+        }
+
+        .theme-switch-wrapper {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.8em;
+        }
+
+        .theme-switch {
+            display: inline-block;
+            height: 22px;
+            position: relative;
+            width: 44px;
+        }
+
+        .theme-switch input {
+            display: none;
+        }
+
+        .slider {
+            background-color: #ccc;
+            bottom: 0;
+            cursor: pointer;
+            left: 0;
+            position: absolute;
+            right: 0;
+            top: 0;
+            transition: .4s;
+        }
+
+        .slider:before {
+            background-color: #fff;
+            bottom: 3px;
+            content: "";
+            height: 16px;
+            left: 3px;
+            position: absolute;
+            transition: .4s;
+            width: 16px;
+        }
+
+        input:checked + .slider {
+            background-color: var(--accent-pink);
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(22px);
+        }
+
+        .slider.round {
+            border-radius: 24px;
+        }
+
+        .slider.round:before {
+            border-radius: 50%;
+        }
+
+        .login-container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 30px 15px;
+        }
+
+        .auth-card {
+            background: var(--card-background);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            box-shadow: 0 12px 35px rgba(0,0,0,0.12);
+            width: 100%;
+            max-width: 440px;
+            padding: 30px;
+            box-sizing: border-box;
+            animation: cardPop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.2);
+        }
+
+        @keyframes cardPop {
+            from { opacity: 0; transform: translateY(15px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .auth-tabs {
+            display: flex;
+            border-bottom: 2px solid var(--border-color);
+            margin-bottom: 24px;
+            gap: 10px;
+        }
+
+        .auth-tab-btn {
+            flex: 1;
+            background: transparent;
+            border: none;
+            padding: 12px 0;
+            font-size: 1.05em;
+            font-weight: 700;
+            color: var(--text-color);
+            opacity: 0.6;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.2s ease;
+        }
+
+        .auth-tab-btn.active {
+            opacity: 1;
+            color: var(--primary-pink);
+        }
+
+        .auth-tab-btn.active::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--primary-pink);
+            border-radius: 3px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 600;
+            font-size: 0.88em;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px 14px;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            background: var(--background-color);
+            color: var(--text-color);
+            box-sizing: border-box;
+            font-size: 0.95em;
+            transition: all 0.2s ease;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--primary-pink);
+            box-shadow: 0 0 0 3px rgba(255, 107, 129, 0.25);
+        }
+
+        .auth-submit-btn {
+            width: 100%;
+            background: var(--primary-pink);
+            color: white;
+            border: none;
+            padding: 13px;
+            border-radius: 10px;
+            font-size: 1.05em;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 12px rgba(255, 107, 129, 0.3);
+            margin-top: 8px;
+        }
+
+        .auth-submit-btn:hover {
+            background: var(--button-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(255, 107, 129, 0.4);
+        }
+
+        .auth-submit-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .auth-alert {
+            padding: 12px 16px;
+            border-radius: 10px;
+            margin-bottom: 18px;
+            font-size: 0.9em;
+            font-weight: 600;
+            display: none;
+        }
+
+        .auth-alert.error {
+            background: #fde8e8;
+            color: #c81e1e;
+            border: 1px solid #f8b4b4;
+        }
+
+        .auth-alert.success {
+            background: #def7ec;
+            color: #03543f;
+            border: 1px solid #bcf0da;
+        }
+
+        body.dark-mode .auth-alert.error {
+            background: #4e1919;
+            color: #fca5a5;
+            border: 1px solid #7f1d1d;
+        }
+
+        body.dark-mode .auth-alert.success {
+            background: #133a28;
+            color: #86efac;
+            border: 1px solid #14532d;
+        }
+
+        .auth-footer-note {
+            text-align: center;
+            font-size: 0.82em;
+            opacity: 0.7;
+            margin-top: 20px;
+        }
+
+        footer {
+            text-align: center;
+            padding: 15px;
+            font-size: 0.8em;
+            opacity: 0.7;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="theme-switch-wrapper">
+            <label class="theme-switch" for="checkbox">
+                <input type="checkbox" id="checkbox" />
+                <div class="slider round"></div>
+            </label>
+        </div>
+        <h1>Virtual Recipe Box &amp; Planner</h1>
+    </header>
+
+    <div class="login-container">
+        <div class="auth-card">
+            <div class="auth-tabs">
+                <button class="auth-tab-btn active" id="tabLoginBtn" onclick="switchAuthTab('login')">🔑 Log In</button>
+                <button class="auth-tab-btn" id="tabRegisterBtn" onclick="switchAuthTab('register')">✨ Create Account</button>
+            </div>
+
+            <div id="authAlert" class="auth-alert"></div>
+
+            <!-- Log In Form -->
+            <form id="loginForm" onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label for="loginUsername">Username or Email</label>
+                    <input type="text" id="loginUsername" placeholder="e.g. Michaela or chef@home.com" required autofocus autocomplete="username" />
+                </div>
+                <div class="form-group">
+                    <label for="loginPassword">Password</label>
+                    <input type="password" id="loginPassword" placeholder="••••••••" required autocomplete="current-password" />
+                </div>
+                <button type="submit" class="auth-submit-btn" id="loginSubmitBtn">Log In &rarr;</button>
+            </form>
+
+            <!-- Register Form -->
+            <form id="registerForm" onsubmit="handleRegister(event)" style="display: none;">
+                <div class="form-group">
+                    <label for="regUsername">Username</label>
+                    <input type="text" id="regUsername" placeholder="e.g. Michaela" required autocomplete="username" />
+                </div>
+                <div class="form-group">
+                    <label for="regDisplayName">Display Name (Optional)</label>
+                    <input type="text" id="regDisplayName" placeholder="e.g. Michaela Smith" />
+                </div>
+                <div class="form-group">
+                    <label for="regEmail">Email Address</label>
+                    <input type="email" id="regEmail" placeholder="e.g. michaela@example.com" required autocomplete="email" />
+                </div>
+                <div class="form-group">
+                    <label for="regPassword">Password (min. 8 characters)</label>
+                    <input type="password" id="regPassword" placeholder="••••••••" required minlength="8" autocomplete="new-password" />
+                </div>
+                <button type="submit" class="auth-submit-btn" id="regSubmitBtn">Create Account &rarr;</button>
+            </form>
+
+            <div class="auth-footer-note" id="authFooterNote">
+                🔒 Secure encrypted session &bull; Your recipes and meal plans are private to you.
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        &copy; Virtual Recipe Box &bull; Self-Hosted Multi-User Edition
+    </footer>
+
+    <script src="auth.js"></script>
+    <script>
+        // Check if already logged in -> redirect
+        window.Auth.init().then(user => {
+            if (user) {
+                const urlParams = new URLSearchParams(window.location.search);
+                const redirectUrl = urlParams.get('redirect') || 'index.html';
+                window.location.href = redirectUrl;
+            }
+        });
+
+        function switchAuthTab(tab) {
+            const loginBtn = document.getElementById('tabLoginBtn');
+            const regBtn = document.getElementById('tabRegisterBtn');
+            const loginForm = document.getElementById('loginForm');
+            const registerForm = document.getElementById('registerForm');
+            const alertBox = document.getElementById('authAlert');
+            alertBox.style.display = 'none';
+
+            if (tab === 'login') {
+                loginBtn.classList.add('active');
+                regBtn.classList.remove('active');
+                loginForm.style.display = 'block';
+                registerForm.style.display = 'none';
+                document.getElementById('loginUsername').focus();
+            } else {
+                loginBtn.classList.remove('active');
+                regBtn.classList.add('active');
+                loginForm.style.display = 'none';
+                registerForm.style.display = 'block';
+                document.getElementById('regUsername').focus();
+            }
+        }
+
+        function showAlert(msg, isSuccess = false) {
+            const el = document.getElementById('authAlert');
+            el.className = 'auth-alert ' + (isSuccess ? 'success' : 'error');
+            el.textContent = msg;
+            el.style.display = 'block';
+        }
+
+        async function handleLogin(e) {
+            e.preventDefault();
+            const btn = document.getElementById('loginSubmitBtn');
+            const username = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value;
+
+            btn.disabled = true;
+            btn.textContent = 'Logging in...';
+            document.getElementById('authAlert').style.display = 'none';
+
+            try {
+                const user = await window.Auth.login(username, password);
+                showAlert(`Welcome back, ${user.display_name || user.username}! Redirecting...`, true);
+                const urlParams = new URLSearchParams(window.location.search);
+                const redirectUrl = urlParams.get('redirect') || 'index.html';
+                setTimeout(() => {
+                    window.location.href = redirectUrl;
+                }, 600);
+            } catch (err) {
+                showAlert(err.message || 'Invalid username or password');
+                btn.disabled = false;
+                btn.textContent = 'Log In →';
+            }
+        }
+
+        async function handleRegister(e) {
+            e.preventDefault();
+            const btn = document.getElementById('regSubmitBtn');
+            const username = document.getElementById('regUsername').value.trim();
+            const displayName = document.getElementById('regDisplayName').value.trim();
+            const email = document.getElementById('regEmail').value.trim();
+            const password = document.getElementById('regPassword').value;
+
+            btn.disabled = true;
+            btn.textContent = 'Creating account...';
+            document.getElementById('authAlert').style.display = 'none';
+
+            try {
+                const user = await window.Auth.register(username, email, password, displayName);
+                showAlert(`Account created successfully! Welcome, ${user.display_name || user.username}!`, true);
+                const urlParams = new URLSearchParams(window.location.search);
+                const redirectUrl = urlParams.get('redirect') || 'index.html';
+                setTimeout(() => {
+                    window.location.href = redirectUrl;
+                }, 800);
+            } catch (err) {
+                showAlert(err.message || 'Failed to create account');
+                btn.disabled = false;
+                btn.textContent = 'Create Account →';
+            }
+        }
+    </script>
+</body>
+</html>
