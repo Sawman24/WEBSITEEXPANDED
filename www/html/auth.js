@@ -140,17 +140,27 @@
             if (this.user) {
                 const initial = (this.user.display_name || this.user.username || 'U')[0].toUpperCase();
                 const name = this.user.display_name || this.user.username;
+                const isAdmin = !!this.user.is_admin;
+                const adminBadge = isAdmin ? `<span class="user-admin-badge" title="Administrator">🛡️ Admin</span>` : '';
+                const adminMenuItem = isAdmin ? `
+                    <div class="user-dropdown-divider"></div>
+                    <a href="feed.html?filter=admin_queue" class="user-dropdown-item admin-menu-item">
+                        🛡️ <strong>Moderation Queue</strong>
+                    </a>
+                ` : '';
+
                 container.innerHTML = `
-                    <div class="user-pill-btn" id="userPillBtn" onclick="window.Auth.toggleUserMenu(event)">
-                        <span class="user-avatar-initial">${initial}</span>
+                    <div class="user-pill-btn ${isAdmin ? 'is-admin-pill' : ''}" id="userPillBtn" onclick="window.Auth.toggleUserMenu(event)">
+                        <span class="user-avatar-initial ${isAdmin ? 'admin-avatar' : ''}">${initial}</span>
                         <span class="user-display-name">${escapeAuthHtml(name)}</span>
+                        ${adminBadge}
                         <span class="user-arrow">▾</span>
                     </div>
                     <div class="user-dropdown-menu" id="userDropdownMenu">
                         <div class="user-dropdown-header">
-                            <div class="user-dropdown-avatar">${initial}</div>
+                            <div class="user-dropdown-avatar ${isAdmin ? 'admin-avatar' : ''}">${initial}</div>
                             <div class="user-dropdown-info">
-                                <div class="user-dropdown-name">${escapeAuthHtml(name)}</div>
+                                <div class="user-dropdown-name">${escapeAuthHtml(name)} ${adminBadge}</div>
                                 <div class="user-dropdown-email">${escapeAuthHtml(this.user.email || '')}</div>
                             </div>
                         </div>
@@ -159,6 +169,7 @@
                         <a href="feed.html?filter=close_friends" class="user-dropdown-item">⭐ Close Friends Feed</a>
                         <a href="recipes.html" class="user-dropdown-item">🍲 My Recipe Box</a>
                         <a href="planner.html" class="user-dropdown-item">📅 Weekly Planner</a>
+                        ${adminMenuItem}
                         <div class="user-dropdown-divider"></div>
                         <a href="javascript:void(0)" onclick="window.Auth.openProfileModal()" class="user-dropdown-item">⚙️ Account Settings</a>
                         <a href="javascript:void(0)" onclick="window.Auth.logout()" class="user-dropdown-item text-danger">🚪 Log Out</a>
@@ -323,6 +334,32 @@
             font-weight: bold;
             font-size: 0.85em;
             box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+        }
+        .user-admin-badge {
+            background: linear-gradient(135deg, #e67e22, #d35400);
+            color: white;
+            font-size: 0.68em;
+            padding: 2px 7px;
+            border-radius: 10px;
+            font-weight: 700;
+            letter-spacing: 0.4px;
+            text-transform: uppercase;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+        }
+        .user-avatar-initial.admin-avatar, .user-dropdown-avatar.admin-avatar {
+            background: linear-gradient(135deg, #e67e22, #d35400) !important;
+            color: white !important;
+        }
+        .admin-menu-item {
+            color: #d35400 !important;
+            background: rgba(230, 126, 34, 0.08);
+        }
+        .admin-menu-item:hover {
+            background: rgba(230, 126, 34, 0.18) !important;
+            color: #b94a00 !important;
         }
         .user-arrow {
             font-size: 0.8em;

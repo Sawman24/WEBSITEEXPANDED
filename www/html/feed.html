@@ -247,6 +247,205 @@
             box-shadow: 0 3px 8px rgba(255, 107, 129, 0.3);
         }
 
+        .feed-tab-btn.admin-mod-tab {
+            border-color: #e67e22;
+            color: #d35400;
+            background: rgba(230, 126, 34, 0.08);
+        }
+
+        .feed-tab-btn.admin-mod-tab:hover {
+            border-color: #d35400;
+            background: rgba(230, 126, 34, 0.16);
+            color: #b94a00;
+        }
+
+        .feed-tab-btn.admin-mod-tab.active {
+            background: linear-gradient(135deg, #e67e22, #d35400);
+            border-color: #d35400;
+            color: white;
+            box-shadow: 0 3px 8px rgba(230, 126, 34, 0.4);
+        }
+
+        /* Moderation Dashboard & Queue Styles */
+        .mod-queue-header {
+            background: linear-gradient(135deg, rgba(230, 126, 34, 0.12) 0%, var(--card-background) 100%);
+            border: 1.5px solid #e67e22;
+            border-radius: 16px;
+            padding: 22px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 18px rgba(230, 126, 34, 0.1);
+            animation: fadeIn 0.25s ease-out;
+        }
+
+        .mod-queue-header h3 {
+            margin: 0 0 6px 0;
+            color: #d35400;
+            font-size: 1.4em;
+        }
+
+        .mod-stats-row {
+            display: flex;
+            gap: 14px;
+            margin-top: 14px;
+            flex-wrap: wrap;
+        }
+
+        .mod-stat-pill {
+            background: var(--card-background);
+            border: 1px solid var(--border-color);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.88em;
+            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .mod-section-title {
+            font-size: 1.2em;
+            color: var(--text-color);
+            margin: 28px 0 14px 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 6px;
+        }
+
+        .mod-card {
+            background: var(--card-background);
+            border: 1.5px solid var(--border-color);
+            border-radius: 14px;
+            padding: 18px 20px;
+            margin-bottom: 18px;
+            box-shadow: 0 3px 12px rgba(0,0,0,0.05);
+            transition: all 0.2s ease;
+        }
+
+        .mod-card.quarantined {
+            border-color: #e74c3c;
+            background: rgba(231, 76, 60, 0.03);
+        }
+
+        .mod-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .mod-badge-quarantined {
+            background: #e74c3c;
+            color: white;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.75em;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .mod-badge-flagged {
+            background: #e67e22;
+            color: white;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.75em;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .mod-reports-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 14px 0;
+            background: rgba(0,0,0,0.02);
+            border-radius: 8px;
+            overflow: hidden;
+            font-size: 0.85em;
+        }
+
+        body.dark-mode .mod-reports-table {
+            background: rgba(255,255,255,0.04);
+        }
+
+        .mod-reports-table th, .mod-reports-table td {
+            padding: 8px 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .mod-reports-table th {
+            font-weight: 700;
+            color: var(--primary-pink);
+            background: rgba(0,0,0,0.03);
+        }
+
+        .mod-actions-toolbar {
+            display: flex;
+            gap: 10px;
+            margin-top: 14px;
+            padding-top: 12px;
+            border-top: 1px solid var(--border-color);
+            flex-wrap: wrap;
+        }
+
+        .btn-mod-dismiss {
+            background: #27ae60;
+            color: white;
+            border: none;
+            padding: 7px 16px;
+            border-radius: 18px;
+            font-weight: 600;
+            font-size: 0.85em;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-mod-dismiss:hover {
+            background: #219653;
+            transform: translateY(-1px);
+        }
+
+        .btn-mod-delete {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 7px 16px;
+            border-radius: 18px;
+            font-weight: 600;
+            font-size: 0.85em;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-mod-delete:hover {
+            background: #c0392b;
+            transform: translateY(-1px);
+        }
+
+        .btn-mod-suspend {
+            background: transparent;
+            border: 1.5px solid #e67e22;
+            color: #d35400;
+            padding: 6px 14px;
+            border-radius: 18px;
+            font-weight: 600;
+            font-size: 0.85em;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-mod-suspend:hover {
+            background: #e67e22;
+            color: white;
+            transform: translateY(-1px);
+        }
+
         /* Composer Card */
         .composer-card {
             background: var(--card-background);
@@ -1303,6 +1502,7 @@
             <button class="feed-tab-btn" id="tab-friends" onclick="setFeedFilter('friends')">👥 Friends Only</button>
             <button class="feed-tab-btn" id="tab-close_friends" onclick="setFeedFilter('close_friends')">⭐ Close Friends</button>
             <button class="feed-tab-btn" id="tab-trending" onclick="setFeedFilter('trending')">🔥 Trending</button>
+            <button class="feed-tab-btn admin-mod-tab" id="tab-admin_queue" style="display:none;" onclick="setFeedFilter('admin_queue')">🛡️ Mod Queue (<span id="modPendingBadge">0</span>)</button>
         </div>
 
         <!-- My Posts Hub / Activity Banner (Shown when My Posts tab is active) -->
@@ -1417,6 +1617,21 @@
             currentUser = user;
             if (currentUser) {
                 loadMyRecipesDropdown();
+                if (currentUser.is_admin) {
+                    const modTab = document.getElementById('tab-admin_queue');
+                    if (modTab) {
+                        modTab.style.display = 'inline-flex';
+                        fetch('/api/admin/moderation/queue', { credentials: 'include' })
+                            .then(r => r.ok ? r.json() : null)
+                            .then(d => {
+                                if (d && d.stats) {
+                                    const b = document.getElementById('modPendingBadge');
+                                    if (b) b.textContent = d.stats.total_pending;
+                                }
+                            })
+                            .catch(() => {});
+                    }
+                }
             } else {
                 const composer = document.getElementById('composerCard');
                 if (composer) {
@@ -1429,10 +1644,10 @@
                 }
             }
 
-            // Check URL query param for filter tab (e.g. ?filter=my_posts)
+            // Check URL query param for filter tab (e.g. ?filter=my_posts or ?filter=admin_queue)
             const urlParams = new URLSearchParams(window.location.search);
             const targetFilter = urlParams.get('filter');
-            if (targetFilter && ['all', 'my_posts', 'friends', 'close_friends', 'trending'].includes(targetFilter)) {
+            if (targetFilter && ['all', 'my_posts', 'friends', 'close_friends', 'trending', 'admin_queue'].includes(targetFilter)) {
                 setFeedFilter(targetFilter);
             } else {
                 loadPosts();
@@ -1445,12 +1660,29 @@
                 window.location.href = `login.html?redirect=${encodeURIComponent('feed.html?filter=' + filter)}`;
                 return;
             }
+            if (filter === 'admin_queue' && (!currentUser || !currentUser.is_admin)) {
+                alert('Admin privileges required to access the moderation queue.');
+                setFeedFilter('all');
+                return;
+            }
+
             currentFeedFilter = filter;
             document.querySelectorAll('.feed-tab-btn').forEach(btn => btn.classList.remove('active'));
             const activeBtn = document.getElementById(`tab-${filter}`);
             if (activeBtn) activeBtn.classList.add('active');
 
+            const composer = document.getElementById('composerCard');
             const banner = document.getElementById('myPostsStatsBanner');
+
+            if (filter === 'admin_queue') {
+                if (composer) composer.style.display = 'none';
+                if (banner) banner.style.display = 'none';
+                loadAdminModerationQueue();
+                return;
+            }
+
+            if (composer && currentUser) composer.style.display = 'block';
+
             if (filter === 'my_posts') {
                 await renderMyPostsBanner();
                 if (banner) banner.style.display = 'block';
@@ -1743,6 +1975,8 @@
             let deleteBtnHtml = '';
             if (post.is_mine) {
                 deleteBtnHtml = `<button class="btn-delete-post" title="Delete Post" onclick="deletePost(${post.id})">🗑️</button>`;
+            } else if (currentUser && currentUser.is_admin) {
+                deleteBtnHtml = `<button class="btn-delete-post" title="🛡️ Admin Mod Delete" onclick="deletePost(${post.id})" style="opacity:0.9; color:#e67e22; border:1px solid #e67e22; border-radius:12px; font-size:0.8em; padding:2px 8px;">🛡️ Mod Delete</button>`;
             }
 
             card.innerHTML = `
@@ -2154,6 +2388,13 @@
             const authorName = c.author.display_name || c.author.username;
             const replyTag = c.reply_to_username ? `<span class="comment-tag-reply">replying to @${escapeHtml(c.reply_to_username)}</span>` : '';
 
+            let commentDeleteBtn = '';
+            if (c.is_mine) {
+                commentDeleteBtn = `<button class="btn-delete-comment" onclick="deleteComment(${c.id}, ${postId})" title="Delete Comment">&times;</button>`;
+            } else if (currentUser && currentUser.is_admin) {
+                commentDeleteBtn = `<button class="btn-delete-comment" onclick="deleteComment(${c.id}, ${postId})" title="🛡️ Admin Mod Delete" style="color:#e67e22; font-weight:bold; font-size:0.85em; margin-left:4px;">[🛡️ Delete]</button>`;
+            }
+
             item.innerHTML = `
                 <div class="comment-header">
                     <div class="comment-author-box">
@@ -2162,7 +2403,7 @@
                     </div>
                     <span class="comment-meta">
                         ${formatTimeAgo(c.created_at)}
-                        ${c.is_mine ? `<button class="btn-delete-comment" onclick="deleteComment(${c.id}, ${postId})" title="Delete Comment">&times;</button>` : ''}
+                        ${commentDeleteBtn}
                     </span>
                 </div>
                 <div class="comment-body">${escapeHtml(c.comment)}</div>
@@ -2331,6 +2572,269 @@
 
         function closeRecipeModal() {
             document.getElementById('recipeQuickModal').style.display = 'none';
+        }
+
+        // Admin Moderation Queue Dashboard Loader
+        async function loadAdminModerationQueue() {
+            const container = document.getElementById('feedContainer');
+            container.innerHTML = '<p style="text-align:center; padding: 30px; opacity: 0.7;">Loading moderation queue...</p>';
+
+            try {
+                const res = await fetch('/api/admin/moderation/queue', { credentials: 'include' });
+                if (!res.ok) throw new Error('Failed to load moderation queue');
+                const data = await res.json();
+
+                // Update badge
+                const badge = document.getElementById('modPendingBadge');
+                if (badge) badge.textContent = data.stats.total_pending;
+
+                let html = `
+                    <div class="mod-queue-header">
+                        <h3>🛡️ Administrator Moderation Queue</h3>
+                        <p>Review community flags, false reports, quarantined posts, and manage user accounts.</p>
+                        <div class="mod-stats-row">
+                            <span class="mod-stat-pill">📋 Flagged Posts: <strong>${data.stats.pending_posts}</strong></span>
+                            <span class="mod-stat-pill">💬 Flagged Comments: <strong>${data.stats.pending_comments}</strong></span>
+                            <span class="mod-stat-pill" style="color:${data.stats.total_pending > 0 ? '#e74c3c' : '#27ae60'};">
+                                ${data.stats.total_pending > 0 ? '⚠️ Action Required' : '✅ All Clean'}
+                            </span>
+                        </div>
+                    </div>
+                `;
+
+                if (data.stats.total_pending === 0) {
+                    html += `
+                        <div class="empty-feed">
+                            <div style="font-size:2.5em; margin-bottom:10px;">🎉</div>
+                            <h3>Moderation Queue is Clean!</h3>
+                            <p>There are no reported or quarantined posts or comments pending review.</p>
+                        </div>
+                    `;
+                    container.innerHTML = html;
+                    return;
+                }
+
+                if (data.flagged_posts.length > 0) {
+                    html += `<div class="mod-section-title">📌 Flagged Posts (${data.flagged_posts.length})</div>`;
+                    data.flagged_posts.forEach(p => {
+                        const author = p.author.display_name || p.author.username;
+                        const isQuarantined = p.is_hidden;
+                        const badgeHtml = isQuarantined
+                            ? `<span class="mod-badge-quarantined">🚨 Quarantined (Hidden from Feed)</span>`
+                            : `<span class="mod-badge-flagged">🚩 Flagged (${p.report_count} Reports)</span>`;
+
+                        let reportsTableHtml = '';
+                        if (p.reports && p.reports.length > 0) {
+                            reportsTableHtml = `
+                                <table class="mod-reports-table">
+                                    <thead><tr><th>Reporter</th><th>Reason</th><th>Date</th></tr></thead>
+                                    <tbody>
+                                        ${p.reports.map(r => `
+                                            <tr>
+                                                <td>@${escapeHtml(r.reporter_username)}</td>
+                                                <td><code>${escapeHtml(r.reason)}</code></td>
+                                                <td>${formatTimeAgo(r.created_at)}</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            `;
+                        }
+
+                        let imageHtml = '';
+                        if (p.image_url) {
+                            imageHtml = `
+                                <div class="post-image-container" style="max-height:260px; margin:10px 0;">
+                                    <img src="${escapeHtml(p.image_url)}" alt="Post image" class="post-image" style="max-height:260px;" onclick="openImageLightbox('${escapeHtml(p.image_url)}')" />
+                                </div>
+                            `;
+                        }
+
+                        let recipeHtml = '';
+                        if (p.recipe_title) {
+                            recipeHtml = `<div style="font-size:0.88em; padding:6px 12px; background:rgba(0,0,0,0.03); border-radius:8px; margin:6px 0;">🍲 Attached Recipe: <strong>${escapeHtml(p.recipe_title)}</strong></div>`;
+                        }
+
+                        html += `
+                            <div class="mod-card ${isQuarantined ? 'quarantined' : ''}" id="mod-post-${p.id}">
+                                <div class="mod-card-header">
+                                    <div>
+                                        <strong style="color:var(--primary-pink); font-size:1.05em;">${escapeHtml(author)}</strong>
+                                        <span style="opacity:0.7; font-size:0.85em;">(@${escapeHtml(p.author.username)}) &bull; Posted ${formatTimeAgo(p.created_at)}</span>
+                                    </div>
+                                    ${badgeHtml}
+                                </div>
+                                <div style="font-size:0.98em; line-height:1.5; margin-bottom:8px; white-space:pre-wrap;">${escapeHtml(p.content)}</div>
+                                ${imageHtml}
+                                ${recipeHtml}
+                                ${reportsTableHtml}
+                                <div class="mod-actions-toolbar">
+                                    <button class="btn-mod-dismiss" onclick="adminDismissPost(${p.id})">🟢 Dismiss &amp; Restore Post</button>
+                                    <button class="btn-mod-delete" onclick="adminDeletePost(${p.id})">🔴 Delete Post</button>
+                                    <button class="btn-mod-suspend" onclick="adminToggleUserSuspend(${p.user_id}, '${escapeHtml(p.author.username)}')">⚠️ Suspend / Disable User</button>
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+
+                if (data.flagged_comments.length > 0) {
+                    html += `<div class="mod-section-title">💬 Flagged Comments (${data.flagged_comments.length})</div>`;
+                    data.flagged_comments.forEach(c => {
+                        const author = c.author.display_name || c.author.username;
+                        const isQuarantined = c.is_hidden;
+                        const badgeHtml = isQuarantined
+                            ? `<span class="mod-badge-quarantined">🚨 Quarantined</span>`
+                            : `<span class="mod-badge-flagged">🚩 Flagged (${c.report_count} Reports)</span>`;
+
+                        let reportsTableHtml = '';
+                        if (c.reports && c.reports.length > 0) {
+                            reportsTableHtml = `
+                                <table class="mod-reports-table">
+                                    <thead><tr><th>Reporter</th><th>Reason</th><th>Date</th></tr></thead>
+                                    <tbody>
+                                        ${c.reports.map(r => `
+                                            <tr>
+                                                <td>@${escapeHtml(r.reporter_username)}</td>
+                                                <td><code>${escapeHtml(r.reason)}</code></td>
+                                                <td>${formatTimeAgo(r.created_at)}</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            `;
+                        }
+
+                        html += `
+                            <div class="mod-card ${isQuarantined ? 'quarantined' : ''}" id="mod-comment-${c.id}">
+                                <div class="mod-card-header">
+                                    <div>
+                                        <strong style="color:var(--primary-pink); font-size:1.05em;">${escapeHtml(author)}</strong>
+                                        <span style="opacity:0.7; font-size:0.85em;">(@${escapeHtml(c.author.username)}) &bull; Commented ${formatTimeAgo(c.created_at)}</span>
+                                        ${c.reply_to_username ? `<span style="font-size:0.82em; opacity:0.7;"> (in reply to @${escapeHtml(c.reply_to_username)})</span>` : ''}
+                                    </div>
+                                    ${badgeHtml}
+                                </div>
+                                <div style="font-size:0.95em; line-height:1.5; margin-bottom:8px; background:rgba(0,0,0,0.02); padding:8px 12px; border-radius:8px;">
+                                    "${escapeHtml(c.comment)}"
+                                </div>
+                                ${reportsTableHtml}
+                                <div class="mod-actions-toolbar">
+                                    <button class="btn-mod-dismiss" onclick="adminDismissComment(${c.id})">🟢 Dismiss &amp; Restore Comment</button>
+                                    <button class="btn-mod-delete" onclick="adminDeleteCommentMod(${c.id})">🔴 Delete Comment</button>
+                                    <button class="btn-mod-suspend" onclick="adminToggleUserSuspend(${c.user_id}, '${escapeHtml(c.author.username)}')">⚠️ Suspend / Disable User</button>
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+
+                container.innerHTML = html;
+            } catch (err) {
+                container.innerHTML = `<p style="color:#e74c3c; text-align:center; padding: 20px;">Failed to load moderation queue: ${err.message}</p>`;
+            }
+        }
+
+        // Admin Moderation Action Handlers
+        async function adminDismissPost(postId) {
+            try {
+                const res = await fetch(`/api/admin/moderation/posts/${postId}/dismiss`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    const card = document.getElementById(`mod-post-${postId}`);
+                    if (card) {
+                        card.style.opacity = '0.4';
+                        card.style.pointerEvents = 'none';
+                        setTimeout(() => loadAdminModerationQueue(), 400);
+                    }
+                } else {
+                    alert(data.error || 'Failed to dismiss reports');
+                }
+            } catch (err) {
+                alert('Dismiss error: ' + err.message);
+            }
+        }
+
+        async function adminDismissComment(commentId) {
+            try {
+                const res = await fetch(`/api/admin/moderation/comments/${commentId}/dismiss`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    const card = document.getElementById(`mod-comment-${commentId}`);
+                    if (card) {
+                        card.style.opacity = '0.4';
+                        card.style.pointerEvents = 'none';
+                        setTimeout(() => loadAdminModerationQueue(), 400);
+                    }
+                } else {
+                    alert(data.error || 'Failed to dismiss reports');
+                }
+            } catch (err) {
+                alert('Dismiss error: ' + err.message);
+            }
+        }
+
+        async function adminDeletePost(postId) {
+            if (!confirm('Are you sure you want to permanently delete this flagged post?')) return;
+            try {
+                const res = await fetch(`/api/community/posts/${postId}`, {
+                    method: 'DELETE',
+                    credentials: 'include'
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    const card = document.getElementById(`mod-post-${postId}`);
+                    if (card) card.remove();
+                    loadAdminModerationQueue();
+                } else {
+                    alert(data.error || 'Failed to delete post');
+                }
+            } catch (err) {
+                alert('Delete error: ' + err.message);
+            }
+        }
+
+        async function adminDeleteCommentMod(commentId) {
+            if (!confirm('Are you sure you want to permanently delete this flagged comment?')) return;
+            try {
+                const res = await fetch(`/api/community/comments/${commentId}`, {
+                    method: 'DELETE',
+                    credentials: 'include'
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    const card = document.getElementById(`mod-comment-${commentId}`);
+                    if (card) card.remove();
+                    loadAdminModerationQueue();
+                } else {
+                    alert(data.error || 'Failed to delete comment');
+                }
+            } catch (err) {
+                alert('Delete error: ' + err.message);
+            }
+        }
+
+        async function adminToggleUserSuspend(userId, username) {
+            if (!confirm(`Are you sure you want to toggle the suspension status for user @${username}?`)) return;
+            try {
+                const res = await fetch(`/api/admin/users/${userId}/toggle-active`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                const data = await res.json();
+                alert(data.message || 'User status updated');
+                if (res.ok) {
+                    loadAdminModerationQueue();
+                }
+            } catch (err) {
+                alert('User update error: ' + err.message);
+            }
         }
 
         // Close modal on click outside

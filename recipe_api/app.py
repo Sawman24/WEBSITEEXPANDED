@@ -81,7 +81,8 @@ def init_db():
             password_hash TEXT NOT NULL,
             display_name TEXT DEFAULT '',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            is_active INTEGER DEFAULT 1
+            is_active INTEGER DEFAULT 1,
+            is_admin INTEGER DEFAULT 0
         )
     ''')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)')
@@ -323,14 +324,15 @@ def init_db():
     if 'user_id' not in pantry_columns:
         cursor.execute("ALTER TABLE pantry ADD COLUMN user_id INTEGER DEFAULT 1")
 
-    # Create Indexes for Multi-Tenant performance
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_recipes_user ON recipes(user_id)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_recipes_share_token ON recipes(share_token)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_planner_user ON planner(user_id)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_planner_user_date ON planner(user_id, date_key)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_groceries_user ON groceries(user_id)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_stickies_user ON stickies(user_id)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_pantry_user ON pantry(user_id)')
+    user_columns = [col[1] for col in cursor.execute('PRAGMA table_info(users)').fetchall()]
+    if 'is_admin' not in user_columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0")
+
+    # Bootstrap admin accounts if configured
+    admin_env_names = [n.strip() for n in os.environ.get('ADMIN_USERNAMES', 'sawyer,michaela,admin').lower().split(',') if n.strip()]
+    if admin_env_names:
+        placeholders = ','.join('?' for _ in admin_env_names)
+        cursor.execute(f"UPDATE users SET is_admin = 1 WHERE LOWER(username) IN ({placeholders})", tuple(admin_env_names))
 
     conn.commit()
     conn.close()
@@ -365,7 +367,7 @@ def get_authenticated_user():
     conn = get_db_connection()
     now_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
     row = conn.execute('''
-        SELECT u.id, u.username, u.email, u.display_name, u.created_at, u.is_active
+        SELECT u.id, u.username, u.email, u.display_name, u.created_at, u.is_active, u.is_admin
         FROM sessions s
         JOIN users u ON s.user_id = u.id
         WHERE s.token = ? AND s.expires_at > ? AND u.is_active = 1
@@ -378,7 +380,8 @@ def get_authenticated_user():
             'username': row['username'],
             'email': row['email'],
             'display_name': row['display_name'] or row['username'],
-            'created_at': row['created_at']
+            'created_at': row['created_at'],
+            'is_admin': bool(row['is_admin'])
         }
     return None
 
@@ -388,6 +391,18 @@ def login_required(f):
         user = get_authenticated_user()
         if not user:
             return jsonify({'error': 'Authentication required. Please log in.', 'code': 'UNAUTHORIZED'}), 401
+        request.current_user = user
+        return f(*args, **kwargs)
+    return decorated_function
+
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        user = get_authenticated_user()
+        if not user:
+            return jsonify({'error': 'Authentication required. Please log in.', 'code': 'UNAUTHORIZED'}), 401
+        if not user.get('is_admin'):
+            return jsonify({'error': 'Admin privileges required.', 'code': 'FORBIDDEN'}), 403
         request.current_user = user
         return f(*args, **kwargs)
     return decorated_function
@@ -1117,16 +1132,19 @@ def register():
         conn.close()
         return jsonify({'error': 'A user with that username or email already exists.'}), 409
 
+    total_users = cursor.execute('SELECT COUNT(*) FROM users').fetchone()[0]
+    admin_env_names = [n.strip() for n in os.environ.get('ADMIN_USERNAMES', 'sawyer,michaela,admin').lower().split(',') if n.strip()]
+    is_admin = 1 if (total_users == 0 or username.lower() in admin_env_names) else 0
+
     pwd_hash = generate_password_hash(password)
     cursor.execute(
-        'INSERT INTO users (username, email, password_hash, display_name) VALUES (?, ?, ?, ?)',
-        (username, email, pwd_hash, display_name)
+        'INSERT INTO users (username, email, password_hash, display_name, is_admin) VALUES (?, ?, ?, ?, ?)',
+        (username, email, pwd_hash, display_name, is_admin)
     )
     user_id = cursor.lastrowid
 
     # Check if this is the first registered user and claim existing legacy data
-    total_users = cursor.execute('SELECT COUNT(*) FROM users').fetchone()[0]
-    if total_users == 1:
+    if total_users == 0:
         cursor.execute('UPDATE recipes SET user_id = ? WHERE user_id = 1 OR user_id IS NULL', (user_id,))
         cursor.execute('UPDATE planner SET user_id = ? WHERE user_id = 1 OR user_id IS NULL', (user_id,))
         cursor.execute('UPDATE groceries SET user_id = ? WHERE user_id = 1 OR user_id IS NULL', (user_id,))
@@ -1145,7 +1163,8 @@ def register():
         'id': user_id,
         'username': username,
         'email': email,
-        'display_name': display_name
+        'display_name': display_name,
+        'is_admin': bool(is_admin)
     }
     resp = make_response(jsonify({'message': 'Registration successful', 'user': user_info}), 201)
     return set_session_cookie(resp, token)
@@ -1187,7 +1206,8 @@ def login():
         'id': user['id'],
         'username': user['username'],
         'email': user['email'],
-        'display_name': user['display_name'] or user['username']
+        'display_name': user['display_name'] or user['username'],
+        'is_admin': bool(user['is_admin'])
     }
     resp = make_response(jsonify({'message': 'Login successful', 'user': user_info}), 200)
     return set_session_cookie(resp, token)
@@ -1922,15 +1942,21 @@ def create_community_post():
 @login_required
 def delete_community_post(post_id):
     user_id = request.current_user['id']
+    is_admin = request.current_user.get('is_admin', False)
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    post = cursor.execute('SELECT * FROM community_posts WHERE id = ? AND user_id = ?', (post_id, user_id)).fetchone()
+    if is_admin:
+        post = cursor.execute('SELECT * FROM community_posts WHERE id = ?', (post_id,)).fetchone()
+    else:
+        post = cursor.execute('SELECT * FROM community_posts WHERE id = ? AND user_id = ?', (post_id, user_id)).fetchone()
+
     if not post:
         conn.close()
         return jsonify({'error': 'Post not found or unauthorized to delete'}), 404
 
     cursor.execute('DELETE FROM community_posts WHERE id = ?', (post_id,))
+    cursor.execute('DELETE FROM post_reports WHERE post_id = ?', (post_id,))
     conn.commit()
     conn.close()
     return jsonify({'message': 'Post deleted successfully'}), 200
@@ -2065,15 +2091,21 @@ def add_post_comment(post_id):
 @login_required
 def delete_post_comment(comment_id):
     user_id = request.current_user['id']
+    is_admin = request.current_user.get('is_admin', False)
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    comment = cursor.execute('SELECT * FROM post_comments WHERE id = ? AND user_id = ?', (comment_id, user_id)).fetchone()
+    if is_admin:
+        comment = cursor.execute('SELECT * FROM post_comments WHERE id = ?', (comment_id,)).fetchone()
+    else:
+        comment = cursor.execute('SELECT * FROM post_comments WHERE id = ? AND user_id = ?', (comment_id, user_id)).fetchone()
+
     if not comment:
         conn.close()
         return jsonify({'error': 'Comment not found or unauthorized to delete'}), 404
 
     cursor.execute('DELETE FROM post_comments WHERE id = ?', (comment_id,))
+    cursor.execute('DELETE FROM post_reports WHERE comment_id = ?', (comment_id,))
     conn.commit()
     conn.close()
     return jsonify({'message': 'Comment deleted successfully'}), 200
@@ -2158,6 +2190,213 @@ def report_post_comment(comment_id):
         'message': 'Comment reported. Thank you for keeping our community friendly and safe!',
         'quarantined': quarantined,
         'report_count': report_count
+    }), 200
+
+# --- Admin Moderation & User Management Endpoints ---
+
+@app.route('/api/admin/moderation/queue', methods=['GET'])
+@admin_required
+def get_admin_moderation_queue():
+    conn = get_db_connection()
+
+    # Flagged / Quarantined Posts
+    flagged_posts_db = conn.execute('''
+        SELECT p.id, p.user_id, p.content, p.image_url, p.recipe_id, p.report_count, p.is_hidden, p.created_at,
+               u.username as author_username, u.display_name as author_display_name,
+               r.title as recipe_title
+        FROM community_posts p
+        JOIN users u ON p.user_id = u.id
+        LEFT JOIN recipes r ON p.recipe_id = r.id
+        WHERE p.report_count > 0 OR p.is_hidden = 1
+        ORDER BY p.report_count DESC, p.created_at DESC
+    ''').fetchall()
+
+    flagged_posts = []
+    for p in flagged_posts_db:
+        reports_db = conn.execute('''
+            SELECT pr.id, pr.reason, pr.created_at, u.username as reporter_username, u.display_name as reporter_display_name
+            FROM post_reports pr
+            JOIN users u ON pr.reported_by = u.id
+            WHERE pr.post_id = ?
+            ORDER BY pr.created_at DESC
+        ''', (p['id'],)).fetchall()
+
+        reports = [{
+            'id': r['id'],
+            'reason': r['reason'],
+            'created_at': r['created_at'],
+            'reporter_username': r['reporter_username'],
+            'reporter_display_name': r['reporter_display_name'] or r['reporter_username']
+        } for r in reports_db]
+
+        flagged_posts.append({
+            'id': p['id'],
+            'user_id': p['user_id'],
+            'content': p['content'],
+            'image_url': p['image_url'] or '',
+            'recipe_id': p['recipe_id'],
+            'recipe_title': p['recipe_title'] or '',
+            'report_count': p['report_count'],
+            'is_hidden': bool(p['is_hidden']),
+            'created_at': p['created_at'],
+            'author': {
+                'id': p['user_id'],
+                'username': p['author_username'],
+                'display_name': p['author_display_name'] or p['author_username']
+            },
+            'reports': reports
+        })
+
+    # Flagged / Quarantined Comments
+    flagged_comments_db = conn.execute('''
+        SELECT c.id, c.post_id, c.user_id, c.comment, c.reply_to_username, c.is_hidden, c.created_at,
+               u.username as author_username, u.display_name as author_display_name,
+               (SELECT COUNT(*) FROM post_reports WHERE comment_id = c.id) as report_count
+        FROM post_comments c
+        JOIN users u ON c.user_id = u.id
+        WHERE c.is_hidden = 1 OR EXISTS (SELECT 1 FROM post_reports WHERE comment_id = c.id)
+        ORDER BY report_count DESC, c.created_at DESC
+    ''').fetchall()
+
+    flagged_comments = []
+    for c in flagged_comments_db:
+        reports_db = conn.execute('''
+            SELECT pr.id, pr.reason, pr.created_at, u.username as reporter_username, u.display_name as reporter_display_name
+            FROM post_reports pr
+            JOIN users u ON pr.reported_by = u.id
+            WHERE pr.comment_id = ?
+            ORDER BY pr.created_at DESC
+        ''', (c['id'],)).fetchall()
+
+        reports = [{
+            'id': r['id'],
+            'reason': r['reason'],
+            'created_at': r['created_at'],
+            'reporter_username': r['reporter_username'],
+            'reporter_display_name': r['reporter_display_name'] or r['reporter_username']
+        } for r in reports_db]
+
+        flagged_comments.append({
+            'id': c['id'],
+            'post_id': c['post_id'],
+            'user_id': c['user_id'],
+            'comment': c['comment'],
+            'reply_to_username': c['reply_to_username'] or '',
+            'report_count': c['report_count'],
+            'is_hidden': bool(c['is_hidden']),
+            'created_at': c['created_at'],
+            'author': {
+                'id': c['user_id'],
+                'username': c['author_username'],
+                'display_name': c['author_display_name'] or c['author_username']
+            },
+            'reports': reports
+        })
+
+    conn.close()
+
+    return jsonify({
+        'flagged_posts': flagged_posts,
+        'flagged_comments': flagged_comments,
+        'stats': {
+            'pending_posts': len(flagged_posts),
+            'pending_comments': len(flagged_comments),
+            'total_pending': len(flagged_posts) + len(flagged_comments)
+        }
+    }), 200
+
+@app.route('/api/admin/moderation/posts/<int:post_id>/dismiss', methods=['POST'])
+@admin_required
+def dismiss_post_reports(post_id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    post = cursor.execute('SELECT id FROM community_posts WHERE id = ?', (post_id,)).fetchone()
+    if not post:
+        conn.close()
+        return jsonify({'error': 'Post not found'}), 404
+
+    cursor.execute('DELETE FROM post_reports WHERE post_id = ?', (post_id,))
+    cursor.execute('UPDATE community_posts SET report_count = 0, is_hidden = 0 WHERE id = ?', (post_id,))
+    conn.commit()
+    conn.close()
+
+    return jsonify({'message': 'Reports dismissed and post restored to feed', 'post_id': post_id}), 200
+
+@app.route('/api/admin/moderation/comments/<int:comment_id>/dismiss', methods=['POST'])
+@admin_required
+def dismiss_comment_reports(comment_id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    comment = cursor.execute('SELECT id FROM post_comments WHERE id = ?', (comment_id,)).fetchone()
+    if not comment:
+        conn.close()
+        return jsonify({'error': 'Comment not found'}), 404
+
+    cursor.execute('DELETE FROM post_reports WHERE comment_id = ?', (comment_id,))
+    cursor.execute('UPDATE post_comments SET is_hidden = 0 WHERE id = ?', (comment_id,))
+    conn.commit()
+    conn.close()
+
+    return jsonify({'message': 'Reports dismissed and comment restored', 'comment_id': comment_id}), 200
+
+@app.route('/api/admin/users/<int:target_user_id>/toggle-active', methods=['POST'])
+@admin_required
+def toggle_user_active(target_user_id):
+    current_admin_id = request.current_user['id']
+    if current_admin_id == target_user_id:
+        return jsonify({'error': 'You cannot disable your own admin account.'}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    user = cursor.execute('SELECT id, username, is_active FROM users WHERE id = ?', (target_user_id,)).fetchone()
+    if not user:
+        conn.close()
+        return jsonify({'error': 'User not found'}), 404
+
+    new_active = 0 if user['is_active'] else 1
+    cursor.execute('UPDATE users SET is_active = ? WHERE id = ?', (new_active, target_user_id))
+
+    if new_active == 0:
+        cursor.execute('DELETE FROM sessions WHERE user_id = ?', (target_user_id,))
+
+    conn.commit()
+    conn.close()
+
+    status_str = "activated" if new_active == 1 else "suspended/disabled"
+    return jsonify({
+        'message': f"User @{user['username']} has been {status_str}.",
+        'user_id': target_user_id,
+        'is_active': bool(new_active)
+    }), 200
+
+@app.route('/api/admin/users/<int:target_user_id>/toggle-admin', methods=['POST'])
+@admin_required
+def toggle_user_admin(target_user_id):
+    current_admin_id = request.current_user['id']
+    if current_admin_id == target_user_id:
+        return jsonify({'error': 'You cannot change your own admin role status.'}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    user = cursor.execute('SELECT id, username, is_admin FROM users WHERE id = ?', (target_user_id,)).fetchone()
+    if not user:
+        conn.close()
+        return jsonify({'error': 'User not found'}), 404
+
+    new_admin = 0 if user['is_admin'] else 1
+    cursor.execute('UPDATE users SET is_admin = ? WHERE id = ?', (new_admin, target_user_id))
+    conn.commit()
+    conn.close()
+
+    role_str = "promoted to Admin" if new_admin == 1 else "demoted from Admin"
+    return jsonify({
+        'message': f"User @{user['username']} has been {role_str}.",
+        'user_id': target_user_id,
+        'is_admin': bool(new_admin)
     }), 200
 
 # --- Friends & Social Relationships Endpoints ---

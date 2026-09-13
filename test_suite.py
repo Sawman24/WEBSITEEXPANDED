@@ -513,6 +513,121 @@ class MultiUserAndSocialFeedTestCase(unittest.TestCase):
             self.assertTrue(post['is_mine'])
             self.assertNotEqual(post['id'], p1_id)
 
+    def test_10_admin_roles_and_moderation_queue(self):
+        # 1. Verify chef_michaela (first user) has is_admin == True
+        self.client.post('/api/auth/logout')
+        michaela_login = self.client.post('/api/auth/login', json={
+            'username': 'chef_michaela',
+            'password': 'Password123!'
+        })
+        self.assertEqual(michaela_login.status_code, 200)
+        self.assertTrue(michaela_login.get_json()['user']['is_admin'])
+
+        # 2. Verify chef_alex (regular user) has is_admin == False
+        self.client.post('/api/auth/logout')
+        alex_login = self.client.post('/api/auth/login', json={
+            'username': 'chef_alex',
+            'password': 'BrandNewPassword123!'
+        })
+        self.assertEqual(alex_login.status_code, 200)
+        alex_user = alex_login.get_json()['user']
+        alex_user_id = alex_user['id']
+        self.assertFalse(alex_user['is_admin'])
+
+        # 3. Security: Non-admin calling moderation queue gets 403 Forbidden
+        forbidden_res = self.client.get('/api/admin/moderation/queue')
+        self.assertEqual(forbidden_res.status_code, 403)
+        self.assertEqual(forbidden_res.get_json()['code'], 'FORBIDDEN')
+
+        # 4. Security: Tampering with registration payload to inject is_admin=1 is rejected/ignored
+        hacker_reg = self.client.post('/api/auth/register', json={
+            'username': 'hacker_user',
+            'email': 'hacker@test.com',
+            'password': 'Password123!',
+            'is_admin': 1
+        })
+        self.assertEqual(hacker_reg.status_code, 201)
+        self.assertFalse(hacker_reg.get_json()['user']['is_admin'])
+        self.client.post('/api/auth/logout')
+
+        # 5. Alex publishes a questionable post and comment
+        self.client.post('/api/auth/login', json={
+            'username': 'chef_alex',
+            'password': 'BrandNewPassword123!'
+        })
+        q_post = self.client.post('/api/community/posts', json={
+            'content': 'Questionable post that will be flagged!'
+        })
+        q_post_id = q_post.get_json()['post_id']
+
+        q_comment = self.client.post(f'/api/community/posts/{q_post_id}/comments', json={
+            'comment': 'Questionable comment that will be flagged!'
+        })
+        q_comment_id = q_comment.get_json()['comment']['id']
+        self.client.post('/api/auth/logout')
+
+        # 6. Michaela reports both
+        self.client.post('/api/auth/login', json={
+            'username': 'chef_michaela',
+            'password': 'Password123!'
+        })
+        self.client.post(f'/api/community/posts/{q_post_id}/report', json={'reason': 'spam_link'})
+        self.client.post(f'/api/community/comments/{q_comment_id}/report', json={'reason': 'harassment'})
+
+        # 7. Admin views moderation queue
+        queue_res = self.client.get('/api/admin/moderation/queue')
+        self.assertEqual(queue_res.status_code, 200)
+        queue_data = queue_res.get_json()
+        self.assertTrue(queue_data['stats']['total_pending'] >= 2)
+
+        flagged_post_ids = [p['id'] for p in queue_data['flagged_posts']]
+        self.assertIn(q_post_id, flagged_post_ids)
+        flagged_p = next(p for p in queue_data['flagged_posts'] if p['id'] == q_post_id)
+        self.assertEqual(flagged_p['reports'][0]['reporter_username'], 'chef_michaela')
+        self.assertEqual(flagged_p['reports'][0]['reason'], 'spam_link')
+
+        flagged_comm_ids = [c['id'] for c in queue_data['flagged_comments']]
+        self.assertIn(q_comment_id, flagged_comm_ids)
+
+        # 8. Admin dismisses post report
+        dismiss_res = self.client.post(f'/api/admin/moderation/posts/{q_post_id}/dismiss')
+        self.assertEqual(dismiss_res.status_code, 200)
+
+        # 9. Admin dismisses comment report
+        dismiss_c_res = self.client.post(f'/api/admin/moderation/comments/{q_comment_id}/dismiss')
+        self.assertEqual(dismiss_c_res.status_code, 200)
+
+        # 10. Admin suspends Alex
+        suspend_res = self.client.post(f'/api/admin/users/{alex_user_id}/toggle-active')
+        self.assertEqual(suspend_res.status_code, 200)
+        self.assertFalse(suspend_res.get_json()['is_active'])
+
+        # 11. Alex tries to login while suspended -> 403 Disabled
+        self.client.post('/api/auth/logout')
+        alex_suspended_login = self.client.post('/api/auth/login', json={
+            'username': 'chef_alex',
+            'password': 'BrandNewPassword123!'
+        })
+        self.assertEqual(alex_suspended_login.status_code, 403)
+
+        # 12. Admin re-activates Alex
+        self.client.post('/api/auth/login', json={
+            'username': 'chef_michaela',
+            'password': 'Password123!'
+        })
+        reactivate_res = self.client.post(f'/api/admin/users/{alex_user_id}/toggle-active')
+        self.assertEqual(reactivate_res.status_code, 200)
+        self.assertTrue(reactivate_res.get_json()['is_active'])
+
+        # 13. Admin deletes the questionable post directly (mod delete)
+        admin_del_res = self.client.delete(f'/api/community/posts/{q_post_id}')
+        self.assertEqual(admin_del_res.status_code, 200)
+
+        # 14. Admin attempts to disable self -> 400 Bad Request
+        michaela_id = michaela_login.get_json()['user']['id']
+        self_disable = self.client.post(f'/api/admin/users/{michaela_id}/toggle-active')
+        self.assertEqual(self_disable.status_code, 400)
+
 if __name__ == '__main__':
     unittest.main()
 
