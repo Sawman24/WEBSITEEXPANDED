@@ -329,7 +329,7 @@ def init_db():
         cursor.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0")
 
     # Bootstrap admin accounts if configured
-    admin_env_names = [n.strip() for n in os.environ.get('ADMIN_USERNAMES', 'sawyer,michaela,admin').lower().split(',') if n.strip()]
+    admin_env_names = [n.strip() for n in os.environ.get('ADMIN_USERNAMES', 'sawyer,michaela,admin,sawman2224').lower().split(',') if n.strip()]
     if admin_env_names:
         placeholders = ','.join('?' for _ in admin_env_names)
         cursor.execute(f"UPDATE users SET is_admin = 1 WHERE LOWER(username) IN ({placeholders})", tuple(admin_env_names))
@@ -1133,7 +1133,7 @@ def register():
         return jsonify({'error': 'A user with that username or email already exists.'}), 409
 
     total_users = cursor.execute('SELECT COUNT(*) FROM users').fetchone()[0]
-    admin_env_names = [n.strip() for n in os.environ.get('ADMIN_USERNAMES', 'sawyer,michaela,admin').lower().split(',') if n.strip()]
+    admin_env_names = [n.strip() for n in os.environ.get('ADMIN_USERNAMES', 'sawyer,michaela,admin,sawman2224').lower().split(',') if n.strip()]
     is_admin = 1 if (total_users == 0 or username.lower() in admin_env_names) else 0
 
     pwd_hash = generate_password_hash(password)

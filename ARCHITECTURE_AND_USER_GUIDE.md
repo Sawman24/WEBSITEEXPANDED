@@ -328,7 +328,7 @@ DATABASE_PATH=/var/lib/recipes/recipes.db
 UPLOAD_FOLDER=/var/lib/recipes/uploads
 
 # Bootstrapped Admin Usernames (comma-separated)
-ADMIN_USERNAMES=sawyer,michaela,admin
+ADMIN_USERNAMES=sawyer,michaela,admin,sawman2224
 
 # Email Delivery Configuration (Choose Resend or SMTP)
 RESEND_API_KEY=re_123456789abcdef

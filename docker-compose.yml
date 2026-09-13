@@ -8,6 +8,7 @@ services:
     restart: unless-stopped
     environment:
       - DATABASE_PATH=/app/data/recipes.db
+      - ADMIN_USERNAMES=sawyer,michaela,admin,sawman2224
     volumes:
       - recipe_data:/app/data
     networks:
