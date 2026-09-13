@@ -209,6 +209,70 @@
             box-shadow: 0 3px 8px rgba(0,0,0,0.1);
         }
 
+        /* KPI Quick Stats Strip */
+        .kpi-stats-strip {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+            margin-bottom: 28px;
+        }
+
+        .kpi-card {
+            background: var(--card-background);
+            border: 1.5px solid var(--border-color);
+            border-radius: 14px;
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            text-decoration: none;
+            color: var(--text-color);
+            box-shadow: 0 4px 14px rgba(0,0,0,0.04);
+            transition: all 0.2s ease;
+        }
+
+        .kpi-card:hover {
+            transform: translateY(-3px);
+            border-color: var(--primary-pink);
+            box-shadow: 0 8px 22px rgba(255, 107, 129, 0.18);
+        }
+
+        .kpi-card.highlight-posts {
+            background: linear-gradient(135deg, var(--light-pink) 0%, var(--card-background) 100%);
+            border-color: var(--accent-pink);
+        }
+
+        .kpi-icon {
+            font-size: 1.8em;
+            background: var(--light-pink);
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        body.dark-mode .kpi-icon {
+            background: rgba(254, 155, 163, 0.2);
+        }
+
+        .kpi-num {
+            font-size: 1.5em;
+            font-weight: 800;
+            color: var(--primary-pink);
+            line-height: 1.1;
+            font-family: 'Playfair Display', serif;
+        }
+
+        .kpi-lbl {
+            font-size: 0.85em;
+            font-weight: 600;
+            opacity: 0.8;
+            margin-top: 2px;
+        }
+
         /* Three Column Hub: Upcoming Meals, Daily Tasks & Interactive Grocery List */
         .hub-grid {
             display: grid;
@@ -698,9 +762,41 @@
         <div class="greeting-card">
             <div class="greeting-text">
                 <h2 id="greetingTitle">Good Day! ✨</h2>
-                <p>Welcome to your personal recipe box and daily planner.</p>
+                <p>Welcome to your personal recipe box, meal planning center, and foodie community.</p>
             </div>
             <div class="live-date-pill" id="liveDatePill">Today</div>
+        </div>
+
+        <!-- KPI Quick Stats Strip -->
+        <div class="kpi-stats-strip" id="kpiStatsStrip">
+            <a href="recipes.html" class="kpi-card">
+                <span class="kpi-icon">🍲</span>
+                <div>
+                    <div class="kpi-num" id="kpiRecipesCount">...</div>
+                    <div class="kpi-lbl">My Recipes</div>
+                </div>
+            </a>
+            <a href="feed.html?filter=my_posts" class="kpi-card highlight-posts">
+                <span class="kpi-icon">👤</span>
+                <div>
+                    <div class="kpi-num" id="kpiPostsCount">...</div>
+                    <div class="kpi-lbl">My Posts &amp; Activity</div>
+                </div>
+            </a>
+            <a href="planner.html" class="kpi-card">
+                <span class="kpi-icon">📅</span>
+                <div>
+                    <div class="kpi-num" id="kpiMealsCount">...</div>
+                    <div class="kpi-lbl">Planned Meals</div>
+                </div>
+            </a>
+            <a href="javascript:void(0)" onclick="document.getElementById('groceryInput').focus()" class="kpi-card">
+                <span class="kpi-icon">🛒</span>
+                <div>
+                    <div class="kpi-num" id="kpiGroceriesCount">...</div>
+                    <div class="kpi-lbl">Groceries Left</div>
+                </div>
+            </a>
         </div>
 
         <div class="hub-grid">
@@ -756,12 +852,15 @@
             </section>
         </div>
 
-        <!-- Community Spotlight Widget -->
+        <!-- Community & My Posts Activity Widget -->
         <section class="section-box" style="margin-bottom: 30px;">
-            <h2>
-                <span>🍲 Community Kitchen Spotlight</span>
-                <a href="feed.html" style="font-size:0.7em; color:var(--primary-pink); text-decoration:none; font-family:'Open Sans'; font-weight:600;">Explore Community Feed &rarr;</a>
-            </h2>
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; border-bottom:2px solid var(--light-pink); padding-bottom:8px; margin-bottom:15px;">
+                <h2 style="margin:0; border:none; padding:0; font-size:1.35em;">🍲 Community Kitchen &amp; My Activity</h2>
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <a href="feed.html?filter=my_posts" style="background:var(--light-pink); color:var(--primary-pink); font-size:0.82em; text-decoration:none; font-weight:700; padding:5px 12px; border-radius:16px;">👤 View My Posts &rarr;</a>
+                    <a href="feed.html" style="background:var(--primary-pink); color:white; font-size:0.82em; text-decoration:none; font-weight:700; padding:5px 12px; border-radius:16px;">🌟 Explore Feed &rarr;</a>
+                </div>
+            </div>
             <div id="communitySpotlightContainer" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px;">
                 <p style="padding:10px; color:#888;">Loading community recipes &amp; posts...</p>
             </div>
@@ -1263,6 +1362,25 @@
                 return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
             }
 
+            async function loadUserStats() {
+                try {
+                    const res = await fetch('/api/users/me/stats', { credentials: 'include' });
+                    if (res.ok) {
+                        const data = await res.json();
+                        const rEl = document.getElementById('kpiRecipesCount');
+                        const pEl = document.getElementById('kpiPostsCount');
+                        const mEl = document.getElementById('kpiMealsCount');
+                        const gEl = document.getElementById('kpiGroceriesCount');
+                        if (rEl) rEl.textContent = data.recipes_count;
+                        if (pEl) pEl.textContent = data.posts_count;
+                        if (mEl) mEl.textContent = data.meals_planned_count;
+                        if (gEl) gEl.textContent = data.groceries_count;
+                    }
+                } catch (e) {
+                    console.warn('Failed to load user stats:', e);
+                }
+            }
+
             // Require authenticated session before loading data
             window.Auth.requireAuth((user) => {
                 const greetingEl = document.getElementById('greetingTitle');
@@ -1271,6 +1389,7 @@
                     greetingEl.innerHTML = `Good Day, ${escapeHtml(displayName)}! ✨`;
                 }
                 // Init all sections
+                loadUserStats();
                 loadUpcomingMeals();
                 loadTasksForDay();
                 loadGroceries();

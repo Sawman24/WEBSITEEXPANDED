@@ -453,6 +453,66 @@ class MultiUserAndSocialFeedTestCase(unittest.TestCase):
         feed_ids = [p['id'] for p in feed_res.get_json()]
         self.assertNotIn(spam_post_id, feed_ids)
 
+    def test_09_my_posts_hub_and_user_stats(self):
+        # Michaela logs in
+        self.client.post('/api/auth/logout')
+        self.client.post('/api/auth/login', json={
+            'username': 'chef_michaela',
+            'password': 'Password123!'
+        })
+
+        # Michaela publishes a post
+        p1 = self.client.post('/api/community/posts', json={
+            'content': 'Michaela sourdough post for testing My Posts hub!'
+        })
+        self.assertEqual(p1.status_code, 201)
+        p1_id = p1.get_json()['post_id']
+
+        # Check Michaela's stats
+        stats_res = self.client.get('/api/users/me/stats')
+        self.assertEqual(stats_res.status_code, 200)
+        stats = stats_res.get_json()
+        self.assertEqual(stats['username'], 'chef_michaela')
+        self.assertTrue(stats['posts_count'] >= 1)
+        self.assertTrue(stats['recipes_count'] >= 1)
+        self.assertIn('likes_received', stats)
+        self.assertIn('comments_received', stats)
+        self.assertIn('friends_count', stats)
+        self.assertIn('close_friends_count', stats)
+
+        # Michaela gets her own posts via filter=my_posts
+        my_posts_res = self.client.get('/api/community/posts?filter=my_posts')
+        self.assertEqual(my_posts_res.status_code, 200)
+        my_posts = my_posts_res.get_json()
+        self.assertTrue(len(my_posts) >= 1)
+        for post in my_posts:
+            self.assertEqual(post['author']['username'], 'chef_michaela')
+            self.assertTrue(post['is_mine'])
+
+        # Alex logs in
+        self.client.post('/api/auth/logout')
+        self.client.post('/api/auth/login', json={
+            'username': 'chef_alex',
+            'password': 'BrandNewPassword123!'
+        })
+
+        # Alex publishes a post
+        p2 = self.client.post('/api/community/posts', json={
+            'content': 'Alex specialty chocolate chip cookies!'
+        })
+        self.assertEqual(p2.status_code, 201)
+        p2_id = p2.get_json()['post_id']
+
+        # Alex calls filter=my_posts -> only sees Alex's posts
+        alex_my_posts_res = self.client.get('/api/community/posts?filter=my_posts')
+        self.assertEqual(alex_my_posts_res.status_code, 200)
+        alex_my_posts = alex_my_posts_res.get_json()
+        self.assertTrue(len(alex_my_posts) >= 1)
+        for post in alex_my_posts:
+            self.assertEqual(post['author']['username'], 'chef_alex')
+            self.assertTrue(post['is_mine'])
+            self.assertNotEqual(post['id'], p1_id)
+
 if __name__ == '__main__':
     unittest.main()
 

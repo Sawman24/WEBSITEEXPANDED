@@ -155,7 +155,12 @@
                             </div>
                         </div>
                         <div class="user-dropdown-divider"></div>
-                        <a href="javascript:void(0)" onclick="window.Auth.openProfileModal()" class="user-dropdown-item">⚙️ Profile & Password</a>
+                        <a href="feed.html?filter=my_posts" class="user-dropdown-item">👤 <strong>My Posts & Activity</strong></a>
+                        <a href="feed.html?filter=close_friends" class="user-dropdown-item">⭐ Close Friends Feed</a>
+                        <a href="recipes.html" class="user-dropdown-item">🍲 My Recipe Box</a>
+                        <a href="planner.html" class="user-dropdown-item">📅 Weekly Planner</a>
+                        <div class="user-dropdown-divider"></div>
+                        <a href="javascript:void(0)" onclick="window.Auth.openProfileModal()" class="user-dropdown-item">⚙️ Account Settings</a>
                         <a href="javascript:void(0)" onclick="window.Auth.logout()" class="user-dropdown-item text-danger">🚪 Log Out</a>
                     </div>
                 `;

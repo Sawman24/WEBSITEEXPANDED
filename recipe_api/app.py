@@ -1799,7 +1799,13 @@ def get_community_posts():
     where_clauses = ["p.is_hidden = 0"]
     params = [current_user_id, current_user_id, current_user_id, current_user_id, current_user_id, current_user_id]
 
-    if feed_filter == 'friends':
+    if feed_filter in ('my_posts', 'mine', 'me'):
+        if not current_user_id:
+            conn.close()
+            return jsonify([]), 200
+        where_clauses.append("p.user_id = ?")
+        params.append(current_user_id)
+    elif feed_filter == 'friends':
         if not current_user_id:
             conn.close()
             return jsonify([]), 200
@@ -2253,6 +2259,56 @@ def toggle_close_friend(friend_id):
     return jsonify({
         'is_close_friend': bool(new_val),
         'message': '⭐ Added to Close Friends!' if new_val else 'Removed from Close Friends'
+    }), 200
+
+@app.route('/api/users/me/stats', methods=['GET'])
+@login_required
+def get_my_user_stats():
+    user_id = request.current_user['id']
+    conn = get_db_connection()
+
+    recipes_count = conn.execute('SELECT COUNT(*) FROM recipes WHERE user_id = ?', (user_id,)).fetchone()[0]
+    posts_count = conn.execute('SELECT COUNT(*) FROM community_posts WHERE user_id = ? AND is_hidden = 0', (user_id,)).fetchone()[0]
+
+    likes_received = conn.execute('''
+        SELECT COUNT(*) FROM post_likes pl 
+        JOIN community_posts cp ON pl.post_id = cp.id 
+        WHERE cp.user_id = ?
+    ''', (user_id,)).fetchone()[0]
+
+    comments_received = conn.execute('''
+        SELECT COUNT(*) FROM post_comments pc 
+        JOIN community_posts cp ON pc.post_id = cp.id 
+        WHERE cp.user_id = ? AND pc.is_hidden = 0
+    ''', (user_id,)).fetchone()[0]
+
+    friends_count = conn.execute('SELECT COUNT(*) FROM friendships WHERE user_id = ?', (user_id,)).fetchone()[0]
+    close_friends_count = conn.execute('SELECT COUNT(*) FROM friendships WHERE user_id = ? AND is_close_friend = 1', (user_id,)).fetchone()[0]
+
+    groceries_count = conn.execute('SELECT COUNT(*) FROM groceries WHERE user_id = ? AND checked = 0', (user_id,)).fetchone()[0]
+    stickies_count = conn.execute('SELECT COUNT(*) FROM stickies WHERE user_id = ?', (user_id,)).fetchone()[0]
+
+    meals_planned_count = 0
+    try:
+        meals_planned_count = conn.execute('SELECT COUNT(*) FROM planner_v2 WHERE user_id = ?', (user_id,)).fetchone()[0]
+    except Exception:
+        pass
+
+    conn.close()
+
+    return jsonify({
+        'user_id': user_id,
+        'username': request.current_user['username'],
+        'display_name': request.current_user['display_name'] or request.current_user['username'],
+        'recipes_count': recipes_count,
+        'posts_count': posts_count,
+        'likes_received': likes_received,
+        'comments_received': comments_received,
+        'friends_count': friends_count,
+        'close_friends_count': close_friends_count,
+        'groceries_count': groceries_count,
+        'stickies_count': stickies_count,
+        'meals_planned_count': meals_planned_count
     }), 200
 
 @app.route('/api/users/<int:target_user_id>/recipes', methods=['GET'])

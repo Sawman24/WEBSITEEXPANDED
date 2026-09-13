@@ -983,6 +983,175 @@
             border-radius: 16px;
         }
 
+        /* My Posts Hero Banner & Stats */
+        .my-posts-hero-banner {
+            background: linear-gradient(135deg, var(--light-pink) 0%, var(--card-background) 100%);
+            border: 1.5px solid var(--accent-pink);
+            border-radius: 16px;
+            padding: 22px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 18px rgba(0,0,0,0.06);
+            animation: fadeIn 0.25s ease-out;
+        }
+
+        .my-activity-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-bottom: 18px;
+        }
+
+        .my-activity-user {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .my-activity-avatar {
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary-pink) 0%, #ff8e53 100%);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.4em;
+            box-shadow: 0 3px 10px rgba(255, 107, 129, 0.3);
+            flex-shrink: 0;
+        }
+
+        .my-activity-info h3 {
+            margin: 0 0 4px 0;
+            font-size: 1.35em;
+            color: var(--primary-pink);
+        }
+
+        .my-activity-info p {
+            margin: 0;
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+
+        .btn-create-shortcut {
+            background: var(--primary-pink);
+            color: white;
+            border: none;
+            padding: 9px 18px;
+            border-radius: 20px;
+            font-weight: 700;
+            font-size: 0.9em;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 3px 8px rgba(255, 107, 129, 0.25);
+        }
+
+        .btn-create-shortcut:hover {
+            background: var(--button-hover);
+            transform: translateY(-1px);
+        }
+
+        .my-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 12px;
+        }
+
+        .my-stat-card {
+            background: var(--background-color);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 12px 14px;
+            text-align: center;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+            transition: transform 0.2s ease;
+        }
+
+        .my-stat-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .my-stat-card .stat-num {
+            font-size: 1.5em;
+            font-weight: 800;
+            color: var(--primary-pink);
+            font-family: 'Playfair Display', serif;
+        }
+
+        .my-stat-card .stat-lbl {
+            font-size: 0.78em;
+            font-weight: 600;
+            opacity: 0.75;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-top: 2px;
+        }
+
+        /* Image Lightbox */
+        .lightbox-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.88);
+            backdrop-filter: blur(8px);
+            z-index: 10000;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .lightbox-content {
+            position: relative;
+            max-width: 90vw;
+            max-height: 90vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .lightbox-content img {
+            max-width: 100%;
+            max-height: 85vh;
+            object-fit: contain;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+            animation: modalPop 0.2s ease-out;
+        }
+
+        .lightbox-close {
+            position: absolute;
+            top: -40px;
+            right: 0;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 34px;
+            height: 34px;
+            font-size: 1.4em;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+
+        .lightbox-close:hover {
+            background: #e74c3c;
+        }
+
+        .post-image {
+            cursor: zoom-in;
+            transition: transform 0.25s ease;
+        }
+
+        .post-image:hover {
+            transform: scale(1.01);
+        }
+
         /* Modals */
         .modal-overlay {
             display: none;
@@ -1130,10 +1299,14 @@
         <!-- Feed Filter Tabs -->
         <div class="feed-filters-bar">
             <button class="feed-tab-btn active" id="tab-all" onclick="setFeedFilter('all')">🌟 All Community</button>
+            <button class="feed-tab-btn" id="tab-my_posts" onclick="setFeedFilter('my_posts')">👤 My Posts</button>
             <button class="feed-tab-btn" id="tab-friends" onclick="setFeedFilter('friends')">👥 Friends Only</button>
             <button class="feed-tab-btn" id="tab-close_friends" onclick="setFeedFilter('close_friends')">⭐ Close Friends</button>
             <button class="feed-tab-btn" id="tab-trending" onclick="setFeedFilter('trending')">🔥 Trending</button>
         </div>
+
+        <!-- My Posts Hub / Activity Banner (Shown when My Posts tab is active) -->
+        <div id="myPostsStatsBanner" style="display:none;" class="my-posts-hero-banner"></div>
 
         <!-- Post Composer Card -->
         <div class="composer-card" id="composerCard">
@@ -1219,6 +1392,11 @@
             <div class="modal-footer">
                 <button type="button" class="btn-friend-action" onclick="closeFriendBoxModal()">Close</button>
             </div>
+    <!-- Image Zoom Lightbox Modal -->
+    <div id="imageLightboxModal" class="lightbox-modal" onclick="closeImageLightbox()">
+        <div class="lightbox-content" onclick="event.stopPropagation()">
+            <button class="lightbox-close" onclick="closeImageLightbox()" title="Close viewer">&times;</button>
+            <img id="lightboxImg" src="" alt="Zoomed dish photo" />
         </div>
     </div>
 
@@ -1240,27 +1418,119 @@
             if (currentUser) {
                 loadMyRecipesDropdown();
             } else {
-                document.getElementById('composerCard').innerHTML = `
-                    <div style="text-align: center; padding: 15px;">
-                        <p style="margin-bottom: 12px; font-weight:600;">Log in or create an account to share food posts, like, comment, and save recipes!</p>
-                        <a href="login.html?redirect=feed.html" class="btn-post" style="text-decoration:none; display:inline-block;">🔑 Log In to Participate</a>
-                    </div>
-                `;
+                const composer = document.getElementById('composerCard');
+                if (composer) {
+                    composer.innerHTML = `
+                        <div style="text-align: center; padding: 15px;">
+                            <p style="margin-bottom: 12px; font-weight:600;">Log in or create an account to share food posts, like, comment, and save recipes!</p>
+                            <a href="login.html?redirect=feed.html" class="btn-post" style="text-decoration:none; display:inline-block;">🔑 Log In to Participate</a>
+                        </div>
+                    `;
+                }
             }
-            loadPosts();
+
+            // Check URL query param for filter tab (e.g. ?filter=my_posts)
+            const urlParams = new URLSearchParams(window.location.search);
+            const targetFilter = urlParams.get('filter');
+            if (targetFilter && ['all', 'my_posts', 'friends', 'close_friends', 'trending'].includes(targetFilter)) {
+                setFeedFilter(targetFilter);
+            } else {
+                loadPosts();
+            }
         });
 
         // Feed Filter switching
-        function setFeedFilter(filter) {
-            if ((filter === 'friends' || filter === 'close_friends') && !currentUser) {
-                window.location.href = 'login.html?redirect=feed.html';
+        async function setFeedFilter(filter) {
+            if ((filter === 'friends' || filter === 'close_friends' || filter === 'my_posts') && !currentUser) {
+                window.location.href = `login.html?redirect=${encodeURIComponent('feed.html?filter=' + filter)}`;
                 return;
             }
             currentFeedFilter = filter;
             document.querySelectorAll('.feed-tab-btn').forEach(btn => btn.classList.remove('active'));
             const activeBtn = document.getElementById(`tab-${filter}`);
             if (activeBtn) activeBtn.classList.add('active');
+
+            const banner = document.getElementById('myPostsStatsBanner');
+            if (filter === 'my_posts') {
+                await renderMyPostsBanner();
+                if (banner) banner.style.display = 'block';
+            } else {
+                if (banner) banner.style.display = 'none';
+            }
+
             loadPosts();
+        }
+
+        // Render My Posts Hub & Influence Banner
+        async function renderMyPostsBanner() {
+            const banner = document.getElementById('myPostsStatsBanner');
+            if (!banner || !currentUser) return;
+
+            try {
+                const res = await fetch('/api/users/me/stats', { credentials: 'include' });
+                if (!res.ok) throw new Error('Could not load user stats');
+                const stats = await res.json();
+
+                const name = stats.display_name || stats.username || 'Chef';
+                const initial = name[0].toUpperCase();
+
+                banner.innerHTML = `
+                    <div class="my-activity-header">
+                        <div class="my-activity-user">
+                            <div class="my-activity-avatar">${initial}</div>
+                            <div class="my-activity-info">
+                                <h3>Chef ${escapeHtml(name)}'s Posts & Activity</h3>
+                                <p>Your personal food timeline, recipe shares, and community engagement hub.</p>
+                            </div>
+                        </div>
+                        <button class="btn-create-shortcut" onclick="scrollToComposer()">✍️ Share New Dish</button>
+                    </div>
+                    <div class="my-stats-grid">
+                        <div class="my-stat-card">
+                            <div class="stat-num">${stats.posts_count}</div>
+                            <div class="stat-lbl">My Posts</div>
+                        </div>
+                        <div class="my-stat-card">
+                            <div class="stat-num" style="color:#e74c3c;">❤️ ${stats.likes_received}</div>
+                            <div class="stat-lbl">Likes Received</div>
+                        </div>
+                        <div class="my-stat-card">
+                            <div class="stat-num" style="color:#3498db;">💬 ${stats.comments_received}</div>
+                            <div class="stat-lbl">Comments Received</div>
+                        </div>
+                        <div class="my-stat-card">
+                            <div class="stat-num" style="color:var(--star-gold);">⭐ ${stats.close_friends_count}</div>
+                            <div class="stat-lbl">Close Friends</div>
+                        </div>
+                    </div>
+                `;
+            } catch (e) {
+                console.warn('Failed to load stats banner:', e);
+            }
+        }
+
+        function scrollToComposer() {
+            const el = document.getElementById('composerCard');
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth' });
+                const txt = document.getElementById('postContent');
+                if (txt) setTimeout(() => txt.focus(), 300);
+            }
+        }
+
+        // Image Lightbox zoom functions
+        function openImageLightbox(src) {
+            const modal = document.getElementById('imageLightboxModal');
+            const img = document.getElementById('lightboxImg');
+            if (modal && img) {
+                img.src = src;
+                modal.style.display = 'flex';
+            }
+        }
+
+        function closeImageLightbox() {
+            const modal = document.getElementById('imageLightboxModal');
+            if (modal) modal.style.display = 'none';
         }
 
         // Load current user's recipes for the composer dropdown
@@ -1383,6 +1653,7 @@
 
                 if (posts.length === 0) {
                     let msg = 'Be the first to share a delicious food post or recipe above!';
+                    if (currentFeedFilter === 'my_posts') msg = 'You haven\'t shared any food posts or recipes yet. Share what you\'re cooking today with the composer above!';
                     if (currentFeedFilter === 'friends') msg = 'You are not following any foodies yet, or your friends haven\'t posted yet. Explore "All Community" to follow friends!';
                     if (currentFeedFilter === 'close_friends') msg = 'No posts from Close Friends yet. Star foodies as Close Friends to see their exclusive kitchen posts!';
                     
@@ -1447,7 +1718,7 @@
             if (post.image_url) {
                 imageHtml = `
                     <div class="post-image-container">
-                        <img src="${escapeHtml(post.image_url)}" alt="Post image" class="post-image" onerror="this.parentElement.style.display='none'" />
+                        <img src="${escapeHtml(post.image_url)}" alt="Post image" class="post-image" onclick="openImageLightbox('${escapeHtml(post.image_url)}')" title="Click to zoom photo" onerror="this.parentElement.style.display='none'" />
                     </div>
                 `;
             }
@@ -1481,6 +1752,7 @@
                         <div class="post-author-names">
                             <span class="post-display-name">
                                 ${escapeHtml(authorName)}
+                                ${post.is_mine ? '<span style="background:var(--light-pink); color:var(--primary-pink); font-size:0.75em; font-weight:700; padding:2px 8px; border-radius:10px; margin-left:4px;">✨ You</span>' : ''}
                                 ${post.author.is_close_friend ? '<span title="Close Friend" style="color:var(--star-gold); font-size:0.9em;">⭐</span>' : ''}
                             </span>
                             <span class="post-meta">@${escapeHtml(post.author.username)} &bull; ${formatTimeAgo(post.created_at)}</span>
