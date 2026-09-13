@@ -321,7 +321,21 @@ class IntensiveVirtualUser:
                     return r, r.status_code == 201
                 track_req('12. Chained Reply Comment', do_reply)
 
-        # 10. 1-Click Fork / Clone a Shared Recipe from the Feed
+        # 10. Community Moderation & Reporting (Simulate realistic community flags & auto-quarantine)
+        if feed_posts and random.random() < 0.15:
+            other_posts = [p for p in feed_posts if not p.get('is_mine')]
+            if other_posts:
+                target_report_post = random.choice(other_posts)
+                report_reasons = ['spam_link', 'inappropriate', 'harassment', 'misleading']
+                chosen_reason = random.choice(report_reasons)
+                def do_report_post(p_id=target_report_post['id'], r_reason=chosen_reason):
+                    r = self.session.post(f"{self.base_url}/api/community/posts/{p_id}/report", json={
+                        "reason": r_reason
+                    }, timeout=12)
+                    return r, r.status_code in (200, 400)
+                track_req('13. Flag / Report Post', do_report_post)
+
+        # 11. 1-Click Fork / Clone a Shared Recipe from the Feed
         clonable_posts = [p for p in feed_posts if p.get('recipe') and p['recipe'].get('share_token')]
         if clonable_posts:
             target_clone = random.choice(clonable_posts)
@@ -329,9 +343,9 @@ class IntensiveVirtualUser:
             def do_clone(token=share_tok):
                 r = self.session.post(f"{self.base_url}/api/recipes/clone/{token}", timeout=12)
                 return r, r.status_code == 201
-            track_req('13. 1-Click Clone Recipe', do_clone)
+            track_req('14. 1-Click Clone Recipe', do_clone)
 
-        # 11. Meal Planner & Grocery Synchronization
+        # 12. Meal Planner & Grocery Synchronization
         def do_plan_meal():
             r = self.session.post(f"{self.base_url}/api/planner/2026-09-18", json={
                 "meals": {
@@ -343,16 +357,16 @@ class IntensiveVirtualUser:
                 "notes": "Community dinner party!"
             }, timeout=12)
             return r, r.status_code == 200
-        track_req('14. Sync Meal Planner', do_plan_meal)
+        track_req('15. Sync Meal Planner', do_plan_meal)
 
         def do_add_groceries():
             r = self.session.post(f"{self.base_url}/api/groceries", json={
                 "item": "Potato Gnocchi\nHeavy Cream\nSpinach\nParmesan\nSourdough Bread\nAvocados\nSalmon Fillets"
             }, timeout=12)
             return r, r.status_code == 201
-        track_req('15. Add Groceries', do_add_groceries)
+        track_req('16. Add Groceries', do_add_groceries)
 
-        # 12. Dashboard Read Multi-Query (Simulate Loading index.html)
+        # 13. Dashboard Read Multi-Query (Simulate Loading index.html)
         def do_read_dashboard():
             r1 = self.session.get(f"{self.base_url}/api/recipes", timeout=12)
             r2 = self.session.get(f"{self.base_url}/api/planner", timeout=12)
@@ -360,7 +374,7 @@ class IntensiveVirtualUser:
             r4 = self.session.get(f"{self.base_url}/api/community/posts?limit=3", timeout=12)
             ok = (r1.status_code == 200 and r2.status_code == 200 and r3.status_code == 200 and r4.status_code == 200)
             return r4, ok
-        track_req('16. Full Dashboard Sync', do_read_dashboard)
+        track_req('17. Full Dashboard Sync', do_read_dashboard)
 
         return latencies, errors
 
