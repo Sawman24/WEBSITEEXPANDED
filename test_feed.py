@@ -462,6 +462,38 @@ def main():
         succ_rate = f"{(stats['ok']/stats['count'])*100:.0f}%" if stats['count'] else "0%"
         print(f"{act_name:<26} | {stats['count']:<7} | {avg_d:<9.1f} | {p95_d:<9.1f} | {succ_rate:<8}")
     print("=" * 70)
+
+    # Admin Health & Moderation Queue Verification
+    try:
+        admin_sess = requests.Session()
+        # Try registering or logging in as Sawman2224
+        reg_res = admin_sess.post(f"{args.url}/api/auth/register", json={
+            "username": "Sawman2224",
+            "email": "sawman2224@admin.test",
+            "password": "AdminPassword123!",
+            "display_name": "Sawman2224 Administrator"
+        }, timeout=10)
+        if reg_res.status_code != 201:
+            admin_sess.post(f"{args.url}/api/auth/login", json={
+                "username": "Sawman2224",
+                "password": "AdminPassword123!"
+            }, timeout=10)
+
+        me_res = admin_sess.get(f"{args.url}/api/auth/me", timeout=10)
+        if me_res.status_code == 200 and me_res.get_json().get('user', {}).get('is_admin'):
+            queue_res = admin_sess.get(f"{args.url}/api/admin/moderation/queue", timeout=10)
+            if queue_res.status_code == 200:
+                q_data = queue_res.get_json()
+                print("🛡️  ADMINISTRATOR VERIFICATION & MODERATION HEALTH")
+                print("-" * 70)
+                print(f"👤 Admin User:              @{me_res.get_json()['user']['username']} (Role: Administrator)")
+                print(f"📋 Mod Queue Pending Posts: {q_data['stats']['pending_posts']}")
+                print(f"💬 Mod Queue Pending Comm.: {q_data['stats']['pending_comments']}")
+                print(f"🔗 Admin Queue URL:         {args.url}/feed.html?filter=admin_queue")
+                print("=" * 70)
+    except Exception as e:
+        pass
+
     print(f"🌐 View Live Community Feed: {args.url}/feed.html")
     print(f"🏠 View Home Dashboard:      {args.url}/index.html")
     print("=" * 70 + "\n")
